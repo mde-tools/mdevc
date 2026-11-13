@@ -1,47 +1,126 @@
-# mdevc
+# mdevc — Edit Markdown right in the preview
 
-mdevc is a Visual Studio Code extension that lets you edit Markdown files directly, in a view that looks just like the
-preview (WYSIWYG). There is no separate editing pane and preview pane, so you can keep writing while you see exactly
-how the formatting looks.
-
-The editor is available in English and Japanese (see the Language setting below).
+**Write Markdown in VS Code the way you read it.** mdevc turns `.md` files into a page you edit directly:
+headings, lists, tables, and images take shape as you type. No source pane, no preview pane, no switching back and
+forth — and the file you save is still plain Markdown.
 
 日本語の説明は [README.ja.md](README.ja.md) を参照してください。
 
-## Installation
+![mdevc editing a Markdown document in GitHub style, with a table, a pasted image, the mdevc Outline, and the context menu](images/readme/editor-screen-gh-style.png)
 
-Search for "mdevc" in the Extensions view of VS Code (Ctrl+Shift+X) and install it.
+## Why mdevc
 
-To install from a `.vsix` file:
+- **One view, what you see is what you save** — Type `## `, `**bold**`, `- `, or `|a|b|` and the formatting appears
+  as soon as you finish the mark.
+- **Clean diffs** — Only the blocks you actually edit are rewritten. Everything else keeps its original spacing and
+  line breaks, so opening and saving a file does not fill your Git diff with noise.
+- **Tables that are easy to work with** — Tab between cells, add rows with `Ctrl+Enter`, and insert or delete rows and
+  columns from the right-click menu.
+- **Paste screenshots** — `Ctrl+V` saves the image next to your file and inserts a relative link for you.
+- **Works with Excel and Word** — Paste an Excel range to get a Markdown table. "Copy for Excel" sends headings,
+  lists, and tables back to Excel one cell per line; normal copy pastes into Word with formatting.
+- **Still VS Code** — Save, undo, dirty markers, Find in Files, and your shortcuts behave as usual. An Outline view
+  lets you jump through long documents.
+- **Two looks, light or dark** — GitHub style or VS Code preview style, following your color theme.
+  English and Japanese UI.
 
-1. Get the `mdevc-<version>.vsix` file.
-2. In the Extensions view of VS Code (Ctrl+Shift+X), open the "…" menu at the top right, choose
-   "Install from VSIX...", and select the `.vsix` file.
-   You can also install it from a command prompt with `code --install-extension mdevc-<version>.vsix`.
+## Choose your style
+
+Prefer the look of the built-in VS Code Markdown preview? Switch **Doc Style** in Settings. The editing features are the
+same in both styles.
+
+![mdevc in VS Code style](images/readme/editor-screen-vs-style.png)
+
+## Get started
+
+1. Install **mdevc** from the Extensions view (`Ctrl+Shift+X`) by searching for "mdevc".
+2. Open any `.md` or `.markdown` file. It opens in mdevc.
+3. Write, then save with `Ctrl+S`.
 
 Requires VS Code 1.90 or later.
 
-## Usage
+To edit a file as plain text, click **Reopen with Text Editor** at the top right of the editor
+(or run "mdevc: Reopen with Text Editor" from the Command Palette). Click **Reopen with mdevc** to come back.
 
-- `.md` and `.markdown` files open in the mdevc editor.
-- For how to write formatting, work with tables, and so on, see the help (read-only), which opens from the editor's
-  right-click menu → Open Help, or from "mdevc: Open Help" in the Command Palette.
-  The help is shown in the language of the editor (see the Language setting below).
-- To edit a file as plain text, click the "Reopen with Text Editor" button at the top right of the editor
-  (or run "mdevc: Reopen with Text Editor" from the Command Palette).
-  To go back to mdevc from the text editor, click the "Reopen with mdevc" button at the top right.
-- Save (Ctrl+S), undo (Ctrl+Z), the unsaved-changes marker, confirmation when closing, and reloading when another app
-  changes the file are all handled by VS Code, just as for normal text files.
-- Find in Files (Ctrl+Shift+F) and Replace in Files (Ctrl+Shift+H) also work as usual. Replacements are shown
-  immediately in any open mdevc editor.
-- The "mdevc Outline" view in the Explorer (side bar) lists the headings of the current mdevc editor (click one to move
-  to it; headings that contain search matches are emphasized). It is a separate view because the standard VS Code
-  "Outline" cannot show the headings of a custom editor such as mdevc.
+> **Full help is built in.** Right-click in the editor → **Open Help** (or "mdevc: Open Help" in the Command Palette)
+> opens a complete, read-only guide in the language of the editor.
 
-### Settings
+## Everything at your right click
 
-Open File > Preferences > Settings (Ctrl+,) and search for "mdevc" to change the following settings. Changes are
-applied immediately to all open editors.
+<img src="images/readme/context-menu.png" alt="mdevc context menu" width="300" align="right">
+
+Right-click in the document for the commands you use most:
+
+- Cut, Copy, **Copy for Excel**, Paste, **Paste without Formatting**
+- Bold, Italic, Underline, Strikethrough, Inline Code, Highlight
+- **Make Link…** and **Insert Table…**
+- Back to Top, **Switch to Source Mode**, and **Open Help**
+
+Commands that already apply to the selection are checked (✓). Right-click a table cell for table commands, and a
+paragraph or heading to change the heading level.
+
+<br clear="right">
+
+## Writing at a glance
+
+| To get | Type (or use) |
+|---|---|
+| Heading | `# ` to `###### ` at the start of a line |
+| Quote | `> ` at the start of a line |
+| Bold / Italic | `**text**` / `*text*`, or `Ctrl+B` / `Ctrl+I` |
+| Underline | Select text and press `Ctrl+U` |
+| Strikethrough / Highlight | `~~text~~` (`Alt+Shift+5`) / `==text==` |
+| Inline code | `` `text` `` |
+| Bulleted / numbered list | `- ` / `1. ` at the start of a line |
+| Check box | `[ ] ` or `[x] ` at the start of a list item |
+| Code block | ```` ``` ```` (optionally with a language) and Enter |
+| Horizontal rule | `---` and Enter |
+| Table | `\|Header 1\|Header 2\|` and Enter, or **Insert Table…** |
+| Link | `[text](URL)`, or select text → **Make Link…** |
+
+**Lists:** Enter adds an item, Tab / Shift+Tab indents / outdents, Shift+Enter breaks the line inside an item,
+and Enter on an empty item leaves the list.
+**Tables:** Tab / Shift+Tab move between cells (Tab in the last cell adds a row), Ctrl+Enter inserts a row below.
+
+## Find, navigate, and view the source
+
+- **Find and replace** — `Ctrl+F` / `Ctrl+H` open a find bar at the top right, just like the VS Code text editor.
+
+  | Operation | Keys |
+  |---|---|
+  | Find next / previous | Enter / Shift+Enter (F3 / Shift+F3) |
+  | Replace and find next | Enter in the replace box |
+  | Replace all | Ctrl+Alt+Enter |
+  | Match case / whole word / regex | Alt+C / Alt+W / Alt+R |
+  | Close | Esc |
+
+- **Find in Files** — `Ctrl+Shift+F` / `Ctrl+Shift+H` work as usual, and replacements show up immediately in open
+  mdevc editors.
+- **mdevc Outline** — The Explorer side bar lists the headings of the current document. Click one to jump to it;
+  headings that contain search matches are emphasized. (The standard Outline cannot show a custom editor's headings,
+  so mdevc provides its own.)
+- **Source mode** — **Show Source** in the status bar at the bottom of the editor (or right-click →
+  **Switch to Source Mode**) shows the raw Markdown; **Show Markdown** switches back.
+- **Zoom** — `Ctrl++`, `Ctrl+-`, `Ctrl+0`, or Ctrl+mouse wheel.
+
+## Images and links
+
+Paste an image from the clipboard with `Ctrl+V`. It is saved right away in a `<file name>.images` folder next to the
+file (for example `clipboard_image_1.png`), and a relative link is inserted. The file must have been saved at least once.
+
+Links open with a single click: web links in your browser, `#heading` links inside the document, and relative links to
+other Markdown files in a new VS Code tab.
+
+## Keyboard
+
+Keys for editing (typing, Ctrl+B / Ctrl+I / Ctrl+U, Alt+Shift+5, undo / redo, copy / paste, zoom, etc.) are handled by
+the editor. Other keys (Ctrl+S, Ctrl+P, Ctrl+Tab, Ctrl+W, F5, Ctrl+Shift+P, etc.) work as VS Code shortcuts.
+
+## Settings
+
+![mdevc settings in VS Code](images/readme/settings-screen.png)
+
+Open Settings (`Ctrl+,`) and search for "mdevc". Changes apply immediately to all open editors.
 
 | Setting | Values |
 |---|---|
@@ -49,46 +128,24 @@ applied immediately to all open editors.
 | Doc Style | GitHub style (default) / VS Code style |
 | Text Color | Sharp (default) / Easy on the eyes |
 | Doc Width | Readable width (max 884px, default) / Fit to the editor width |
-| Soft Break | Do not break until a blank line (default) / Break lines as in the source |
+| Soft Break | Do not break until a blank line (default) / Break lines as in the source. Display only; the saved file is the same. |
 
-The Language setting applies to the editor screen, the messages of the extension, and the help. The names of commands
-and settings shown by VS Code itself (such as in the Command Palette and the Settings editor) follow the VS Code display
-language.
+The Language setting applies to the editor screen, the messages of the extension, and the help. Command and setting
+names shown by VS Code itself follow the VS Code display language. Light and dark appearance follows your VS Code
+color theme.
 
-The light or dark appearance follows the VS Code color theme automatically.
+## Known limitations
 
-### Find and replace
+- When you open a file from the Find in Files results, the editor shows the start of the file rather than the match.
+  Use `Ctrl+F` to jump to it.
+- Images written with an absolute path such as `C:\dir\a.png` are not shown (relative paths are).
+- With "Copy for Excel", images in a table may not paste into Excel.
 
-Ctrl+F (find) and Ctrl+H (replace) show a find and replace bar at the top right of the editor (it works like find in
-the VS Code text editor).
+## Install from a VSIX file
 
-| Operation | Keys |
-|---|---|
-| Find next / find previous | Enter / Shift+Enter (F3 / Shift+F3) |
-| Replace and find next | Enter in the replace box |
-| Replace all | Ctrl+Alt+Enter |
-| Match case / whole word / regular expression | Alt+C / Alt+W / Alt+R |
-| Close | Esc |
-
-### Keyboard
-
-Keys used for editing (typing, Ctrl+B bold, Ctrl+I italic, Ctrl+U underline, undo / redo, copy / paste, zoom with
-Ctrl++ / Ctrl+- / Ctrl+0, Alt+Shift+5 strikethrough, etc.) are handled by the editor.
-Other keys (Ctrl+S, Ctrl+P, Ctrl+Tab, Ctrl+W, F5, Ctrl+Shift+P, etc.) work as VS Code shortcuts.
-
-### Pasting images
-
-When you paste an image from the clipboard, it is saved right away in a "`<file name>.images`" folder next to the file
-you are editing, with a name such as `clipboard_image_1.png`, and a relative path to it is written into the document.
-You cannot paste images into a new file that has never been saved.
-
-### Known limitations
-
-- When you open a file from the Find in Files results, the editor does not move to the match (it shows the start of
-  the file). To see the match, find it with the find and replace bar (Ctrl+F).
-- Images written with an absolute path such as `C:\dir\a.png` are not shown (images with a relative path are shown).
-- With "Copy for Excel", images in a table may not paste into Excel (because of how a VS Code extension can write to
-  the clipboard).
+1. Get the `mdevc-<version>.vsix` file.
+2. In the Extensions view (`Ctrl+Shift+X`), open the "…" menu at the top right, choose "Install from VSIX...", and
+   select the file. You can also run `code --install-extension mdevc-<version>.vsix`.
 
 ## Development
 
@@ -104,6 +161,7 @@ You cannot paste images into a new file that has never been saved.
 | `src/log.js` | Log (the "mdevc" channel in the Output panel) |
 | `package.nls.json` / `package.nls.ja.json` | Display strings in `package.json` (settings, commands, etc.) in English / Japanese |
 | `README.md` / `README.ja.md` | This file (English) / Japanese version |
+| `images/readme/` | Screenshots used in the README (not included in the VSIX; the Marketplace loads them from GitHub) |
 | `CHANGELOG.md` | Change log (shown on the "Changelog" tab of the extension's details page) |
 | `doc/` | Development notes (not included in the VSIX) |
 | `help/HELP.en.md` / `help/HELP.md` | Help in English / Japanese (opened read-only from the right-click menu → Open Help. The one for the language of the editor is opened) |
@@ -134,6 +192,9 @@ This creates `mdevc-<version>.vsix`. Change the version with `version` in `packa
 `CHANGELOG.md` (shown on the "Changelog" tab of the extension's details page). The files to include in the VSIX are
 listed in `.vscodeignore`, so notes in the `doc` folder and similar files are not included.
 
+`vsce` rewrites the relative image paths in this README to URLs on GitHub (from `repository` in `package.json`), so
+push the screenshots in `images/readme/` to GitHub before publishing.
+
 ## License
 
-MIT License (LICENSE.txt)
+MIT License ([LICENSE.txt](LICENSE.txt))

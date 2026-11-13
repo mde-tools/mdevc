@@ -6,6 +6,8 @@
 !web/**
 !help/**
 !images/**
+# README の画面の画像は VSIX に入れない（Marketplace は GitHub から読み込む）
+images/readme/**
 !package.json
 !package.nls.json
 !package.nls.*.json
