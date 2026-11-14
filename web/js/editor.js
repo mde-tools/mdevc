@@ -865,6 +865,8 @@ export class Editor {
    * @param {InputEvent} e
    */
   onInput(e) {
+    // 削除で段落・見出しがつながった時等に、ブラウザが元の見た目を保とうとして付けた style（文字の大きさ等）を取り除く
+    if (e.inputType.startsWith('delete')) this.removeInlineStyles();
     if ('insertParagraph' === e.inputType) this.afterNewParagraph();
     if ('insertLineBreak' === e.inputType) this.markSoftBreak();
     if (!e.isComposing && !this.m_composing && 'insertText' === e.inputType) this.applyInputRules();
@@ -1153,6 +1155,8 @@ export class Editor {
       if (this.onTab(block, e.shiftKey)) this.changed();
     } else if ('Backspace' === key) {
       if (this.onBackspace(e, block)) this.changed();
+    } else if ('Delete' === key) {
+      if (this.onDelete(e, block)) this.changed();
     }
   }
 
@@ -1438,7 +1442,77 @@ export class Editor {
       this.placeCaretAtStart(a_block);
       return true;
     }
+    const prev = a_block.previousElementSibling;
+    const head = document.createRange();
+    head.setStart(a_block, 0);
+    head.setEnd(sel.anchorNode, sel.anchorOffset);
+    if (isMergeableBlock(a_block) && isMergeableBlock(prev) && !head.cloneContents().querySelector('img')) {
+      // 段落・見出しの先頭で BackSpace：前の段落・見出しの末尾につなげる（前のブロックの書式のまま。ブラウザ標準では、
+      // 元の見た目（見出しの文字の大きさ等）を保とうとして style 付きの要素で囲むため、見出しの中で文字の大きさが変わる）
+      e.preventDefault();
+      this.checkpoint('edit');
+      this.mergeBlocks(prev, a_block);
+      return true;
+    }
     return false;
+  }
+
+  /**
+   * Delete キー。段落・見出しの末尾で押した時に、次の段落・見出しをつなげる（BackSpace の mergeBlocks と同じ理由）。
+   * @param {KeyboardEvent} e
+   * @param {HTMLElement} a_block カーソルのある、文字を書く単位の要素
+   * @returns {boolean} 文書を変更したか
+   */
+  onDelete(e, a_block) {
+    const sel = getSelection();
+    if (!sel.isCollapsed || !isMergeableBlock(a_block)) return false;
+    const next = a_block.nextElementSibling;
+    if (!isMergeableBlock(next)) return false;
+    const rest = document.createRange();
+    rest.setStart(sel.anchorNode, sel.anchorOffset);
+    rest.setEnd(a_block, a_block.childNodes.length);
+    if ('' !== rest.toString().replace(/\u200b/g, '') || rest.cloneContents().querySelector('img,input')) return false;
+    e.preventDefault();
+    this.checkpoint('edit');
+    this.mergeBlocks(a_block, next);
+    return true;
+  }
+
+  /**
+   * a_second の中身を a_first の末尾につなげ、a_second を取り除く。カーソルはつなげた所に置く。
+   * @param {HTMLElement} a_first 前の段落・見出し
+   * @param {HTMLElement} a_second 後ろの段落・見出し
+   */
+  mergeBlocks(a_first, a_second) {
+    removePlaceholderBreak(a_first);
+    removePlaceholderBreak(a_second);
+    const offset = a_first.childNodes.length;
+    a_first.append(...a_second.childNodes);
+    a_second.remove();
+    // 中身が無くなった時は、カーソルを置けるよう <br> を置く
+    if (!a_first.firstChild) a_first.appendChild(document.createElement('br'));
+    const range = document.createRange();
+    range.setStart(a_first, Math.min(offset, a_first.childNodes.length));
+    range.collapse(true);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  /**
+   * カーソルのある段落等の中の、文字の要素に付いた style を取り除く（style だけの span は、中身を残して外す）。
+   * 文書の要素には style を使わない（表のセルの揃え方は、セル自身の style で、ここでは扱わない）。
+   */
+  removeInlineStyles() {
+    const block = this.currentTextBlock();
+    if (!block) return;
+    for (const el of [...block.querySelectorAll('[style]')]) {
+      if ('SPAN' === el.tagName && 1 === el.attributes.length) {
+        el.replaceWith(...el.childNodes);
+      } else {
+        el.removeAttribute('style');
+      }
+    }
   }
 
   /**
@@ -2424,6 +2498,16 @@ function ensureOwnLine(a_li) {
  */
 function isEmptyBlock(a_el) {
   return '' === a_el.textContent.replace(/[\u200b\u00a0]/g, '').trim() && !a_el.querySelector('img');
+}
+
+/**
+ * BackSpace・Delete で、自前でつなげる段落・見出しか（最上位・引用の中の段落と、見出し。コードブロック・解釈できない
+ * 部分は除く。前後の両方がこれに当たる時だけつなげる）。
+ * @param {Element|null} a_el 要素
+ * @returns {boolean}
+ */
+function isMergeableBlock(a_el) {
+  return !!a_el && /^(P|H[1-6])$/.test(a_el.tagName) && !a_el.classList.contains('md-raw');
 }
 
 /**
