@@ -2,7 +2,7 @@
   "name": "mdevc",
   "displayName": "mdevc - Inline Markdown Editor for Visual Studio Code",
   "description": "%description%",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "mde-tools",
   "license": "MIT",
   "repository": {
