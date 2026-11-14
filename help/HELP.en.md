@@ -178,7 +178,8 @@ that paragraph becomes the table).
 - **Enter**: moves to the cell below (in the last row, moves to the paragraph after the table).
 - **Shift+Enter**: inserts a line break inside the cell (saved as `<br>`).
 - **Up** / **Down**: in a cell with several lines, moves between the lines. On the top / bottom line, moves to the cell
-  above / below (in the first / last row of the table, moves to the paragraph before / after the table).
+  above / below (in the first / last row of the table, moves to the paragraph before / after the table). When you
+  enter a table with Up / Down from the paragraph before or after it, the cursor goes to the cell at the same horizontal position.
 - **Ctrl+Enter**: inserts a row below.
 - Right-click on a table cell to insert or delete rows and columns, copy the table, or delete the table.
 

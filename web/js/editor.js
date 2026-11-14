@@ -706,9 +706,9 @@ export class Editor {
   }
 
   /**
-   * 表のセルの中で、カーソルが一番上（a_dir が -1）・一番下（1）の行にあるか（上下キーで、セルの中の行の間を移るか、
+   * 表のセル等の中で、カーソルが一番上（a_dir が -1）・一番下（1）の行にあるか（上下キーで、セルの中の行の間を移るか、
    * 上下のセルへ移るかを決める。mde の TableEditor.IsCaretOnEdgeLine と同じ）。セルが空等で位置が分からない時は true。
-   * @param {HTMLTableCellElement} a_cell セル
+   * @param {HTMLElement} a_cell セル（表の前後のブロックにも使う）
    * @param {number} a_dir -1：上、1：下
    * @returns {boolean}
    */
@@ -718,11 +718,13 @@ export class Editor {
     const caret = sel.getRangeAt(0).cloneRange();
     caret.collapse(a_dir < 0);
     const rect = caretRect(caret);
-    const lines = cellLineRects(a_cell);
+    const lines = lineRects(a_cell);
     if (!rect || !lines.length) return true;
-    const half = Math.max(rect.height, 8) / 2;
-    if (a_dir < 0) return rect.top - Math.min(...lines.map((r) => r.top)) < half;
-    return Math.max(...lines.map((r) => r.bottom)) - rect.bottom < half;
+    // 上（下）に、カーソルの行より全体が上（下）にある行が無ければ、一番上（下）の行（同じ行の画像等の背の高いものは、
+    // カーソルの行より上・下にはみ出していても、行としては同じ）
+    const gap = Math.min(rect.height / 2, 4);
+    if (a_dir < 0) return !lines.some((r) => r.bottom <= rect.top + gap);
+    return !lines.some((r) => r.top >= rect.bottom - gap);
   }
 
   /**
@@ -737,7 +739,6 @@ export class Editor {
     const table = a_cell.closest('table');
     const rows = [...table.rows];
     const row = rows[rows.indexOf(a_cell.parentElement) + a_dir];
-    const sel = getSelection();
     if (!row) {
       // 表の外へ：前のブロックの最後・後ろのブロックの先頭
       const neighbor = a_dir < 0 ? table.previousElementSibling : table.nextElementSibling;
@@ -757,17 +758,36 @@ export class Editor {
       blocks[a_dir < 0 ? blocks.length - 1 : 0].scrollIntoView({ block: 'nearest' });
       return false;
     }
-    const target = row.cells[Math.min(a_cell.cellIndex, row.cells.length - 1)];
-    // 今のカーソルの横の位置で、移る先のセルの一番下（上へ移る時）・一番上（下へ移る時）の行の位置を探す
-    let x = null;
-    if (sel.rangeCount) {
-      const caret = sel.getRangeAt(0).cloneRange();
-      caret.collapse(a_dir < 0);
-      const rect = caretRect(caret);
-      if (rect) x = rect.left;
-    }
+    this.placeCaretInCell(row.cells[Math.min(a_cell.cellIndex, row.cells.length - 1)], a_dir, this.caretX(a_dir));
+    return false;
+  }
+
+  /**
+   * 今のカーソルの横の位置（上下キーで移る先の位置を決めるのに使う）。
+   * @param {number} a_dir -1：上へ移る（選択範囲の始まり）、1：下へ移る（選択範囲の終わり）
+   * @returns {number|null} 取れなければ null
+   */
+  caretX(a_dir) {
+    const sel = getSelection();
+    if (!sel.rangeCount) return null;
+    const caret = sel.getRangeAt(0).cloneRange();
+    caret.collapse(a_dir < 0);
+    const rect = caretRect(caret);
+    return rect ? rect.left : null;
+  }
+
+  /**
+   * セルの一番下の行（上へ移ってきた時）・一番上の行（下へ移ってきた時）の、横の位置 a_x にカーソルを置く。
+   * @param {HTMLTableCellElement} a_cell セル
+   * @param {number} a_dir -1：上へ移ってきた、1：下へ移ってきた
+   * @param {number|null} a_x 横の位置（null ならセルの終わり・先頭）
+   */
+  placeCaretInCell(a_cell, a_dir, a_x) {
+    const sel = getSelection();
+    const target = a_cell;
+    const x = a_x;
     target.scrollIntoView({ block: 'nearest' });
-    const lines = cellLineRects(target);
+    const lines = lineRects(target);
     let range = null;
     if (null !== x && lines.length && document.caretRangeFromPoint) {
       const line = a_dir < 0 ? lines.reduce((a, b) => (b.bottom > a.bottom ? b : a)) : lines.reduce((a, b) => (b.top < a.top ? b : a));
@@ -785,7 +805,34 @@ export class Editor {
     } else {
       this.placeCaretAtStart(target);
     }
-    return false;
+  }
+
+  /**
+   * 表の直後のブロックの一番上の行で上キー・直前のブロックの一番下の行で下キーを押した時に、表の一番下・一番上の行の、
+   * 同じ横の位置のセルへ移る（ブラウザ標準では、横の位置に関係なく、最後・最初のセルへ移ってしまうため。mde と同じ）。
+   * @param {HTMLElement} a_block カーソルのある、文字を書く単位の要素（表のセル以外）
+   * @param {number} a_dir -1：上、1：下
+   * @returns {boolean} 表へ移ったか
+   */
+  enterTableVertically(a_block, a_dir) {
+    const top = this.topLevelBlock(a_block);
+    if (!top) return false;
+    const table = a_dir < 0 ? top.previousElementSibling : top.nextElementSibling;
+    if (!table || 'TABLE' !== table.tagName || !table.rows.length || !this.isCaretOnEdgeLine(top, a_dir)) return false;
+    const x = this.caretX(a_dir);
+    const row = table.rows[a_dir < 0 ? table.rows.length - 1 : 0];
+    let cell = row.cells[0];
+    if (null !== x) {
+      // 横の位置を含むセル（無ければ、いちばん近いセル）
+      let best = Infinity;
+      for (const c of row.cells) {
+        const box = c.getBoundingClientRect();
+        const d = x < box.left ? box.left - x : x > box.right ? x - box.right : 0;
+        if (d < best) { best = d; cell = c; }
+      }
+    }
+    this.placeCaretInCell(cell, a_dir, x);
+    return true;
   }
 
   // ===== 入力のイベント =====
@@ -950,6 +997,7 @@ export class Editor {
     const node = sel.anchorNode;
     if (node.parentElement.closest('code,pre,.md-raw,a')) return false;
     const before = node.data.slice(0, sel.anchorOffset);
+    if (this.applyLinkRule(node, before)) return true;
     const rules = [
       { re: /\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, tag: 'strong', len: 2 },
       { re: /~~([^~\s](?:[^~]*[^~\s])?)~~$/, tag: 's', len: 2 },
@@ -970,6 +1018,46 @@ export class Editor {
       // 書式の外側にカーソルを置くための目印（ゼロ幅の空白）。保存時には取り除く
       const tail = document.createTextNode(`\u200b${after}`);
       node.after(el, tail);
+      const range = document.createRange();
+      range.setStart(tail, 1);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * 閉じ側の「)」「>」を打った時に、「[表示する文字](URL)」「<https://...>」「<name@example.com>」をリンクにする
+   * （mde の InlineStyleEditor.CheckInlineFormatTrigger と同じ。画像の「![...](...)」と、「\」でエスケープした「[」「<」は
+   * 変換しない）。リンクの要素は、読み込んだ時と同じになるよう renderInline で作る。
+   * @param {Text} a_node カーソルのある文字のノード
+   * @param {string} a_before a_node の、カーソルより前の文字
+   * @returns {boolean} 変換したか
+   */
+  applyLinkRule(a_node, a_before) {
+    const last = a_before.slice(-1);
+    if (')' !== last && '>' !== last) return false;
+    const patterns = ')' === last
+      ? [/\[[^[\]]+\]\((?:[^()]|\([^()]*\))+\)$/]
+      : [/<https?:\/\/[^\s<>]+>$/i, /<[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+>$/];
+    for (const re of patterns) {
+      const m = a_before.match(re);
+      if (!m) continue;
+      const start = a_before.length - m[0].length;
+      const prev = a_before[start - 1];
+      if ('!' === prev || '\\' === prev) return false;
+      const fragment = htmlToFragment(renderInline(m[0]));
+      const link = fragment.firstChild;
+      if (1 !== fragment.childNodes.length || !link || 'A' !== link.nodeName) return false;
+      const sel = getSelection();
+      this.checkpoint('edit');
+      const after = a_node.data.slice(a_before.length);
+      a_node.data = a_before.slice(0, start);
+      // リンクの外側にカーソルを置くための目印（ゼロ幅の空白）。保存時には取り除く
+      const tail = document.createTextNode(`\u200b${after}`);
+      a_node.after(link, tail);
       const range = document.createRange();
       range.setStart(tail, 1);
       range.collapse(true);
@@ -1043,6 +1131,12 @@ export class Editor {
         e.preventDefault();
         if (this.moveVertical(block, dir)) this.changed();
       }
+      return;
+    }
+    if (('ArrowUp' === key || 'ArrowDown' === key) && !e.shiftKey && !e.altKey && !e.metaKey &&
+        this.enterTableVertically(block, 'ArrowUp' === key ? -1 : 1)) {
+      // 表の前後のブロックから、上下キーで表に入る（同じ横の位置のセルへ）
+      e.preventDefault();
       return;
     }
     // Enter の直前に書いたメールアドレスは、mailto のリンクにする（linkifyEmailBeforeCaret）
@@ -1449,7 +1543,8 @@ export class Editor {
     e.preventDefault();
     const sel = getSelection();
     const hasSelection = sel.rangeCount > 0 && !sel.isCollapsed && this.m_root.contains(sel.anchorNode);
-    const items = [];
+    // 「ページトップに戻る」は一番上（mde と同じ）
+    const items = [{ label: t('ページトップに戻る'), run: () => this.m_handlers.onPageTop() }, null];
     if ('IMG' === e.target.tagName) {
       const src = imageSource(e.target);
       items.push({ label: t('画像を開く'), run: () => this.m_handlers.onOpenImage(src) }, null);
@@ -1462,7 +1557,6 @@ export class Editor {
         null,
         { label: t('すべて選択'), key: 'Ctrl+A', run: () => this.selectAll() },
         null,
-        { label: t('ページトップに戻る'), run: () => this.m_handlers.onPageTop() },
         { label: t('ソースモードに切り替え'), run: () => this.m_handlers.onToggleSource() });
       showMenu(e.clientX, e.clientY, items, (a_item) => a_item.run());
       return;
@@ -1524,9 +1618,7 @@ export class Editor {
       );
     }
     items.push(null, { label: t('すべて選択'), key: 'Ctrl+A', run: () => this.selectAll() });
-    items.push(null,
-      { label: t('ページトップに戻る'), run: () => this.m_handlers.onPageTop() },
-      { label: t('ソースモードに切り替え'), run: () => this.m_handlers.onToggleSource() });
+    items.push(null, { label: t('ソースモードに切り替え'), run: () => this.m_handlers.onToggleSource() });
     if (this.m_handlers.onOpenHelp) items.push(null, { label: t('ヘルプを開く'), run: () => this.m_handlers.onOpenHelp() });
     showMenu(e.clientX, e.clientY, items, (a_item) => a_item.run());
   }
@@ -2318,13 +2410,13 @@ function caretRect(a_range) {
 }
 
 /**
- * セルの中身の行の四角形（行ごと・文字のかたまりごと）。中身が無ければ空の配列。
- * @param {HTMLTableCellElement} a_cell セル
+ * 要素（表のセル・段落等）の中身の行の四角形（行ごと・文字のかたまりごと）。中身が無ければ空の配列。
+ * @param {HTMLElement} a_el 要素
  * @returns {DOMRect[]}
  */
-function cellLineRects(a_cell) {
+function lineRects(a_el) {
   const range = document.createRange();
-  range.selectNodeContents(a_cell);
+  range.selectNodeContents(a_el);
   return [...range.getClientRects()].filter((r) => r.height > 0);
 }
 
