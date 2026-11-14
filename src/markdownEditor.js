@@ -313,7 +313,7 @@ class MarkdownEditor {
           await this.askTableSize();
           break;
         case 'linkDialog':
-          await this.askLinkUrl();
+          await this.askLinkUrl(a_msg.value || '', !!a_msg.edit);
           break;
         case 'dirty':
         case 'save':
@@ -543,12 +543,17 @@ class MarkdownEditor {
     this.post({ cmd: 'tableSize', rows: size ? size.rows : 0, cols: size ? size.cols : 0 });
   }
 
-  /** 右クリックのメニュー「リンクにする…」：リンク先の URL を聞く（結果は linkUrl。取りやめは空）。 */
-  async askLinkUrl() {
+  /**
+   * 右クリックのメニュー「リンクにする…」「リンクを編集…」：リンク先の URL を聞く（結果は linkUrl。取りやめは空）。
+   * @param {string} a_value 入力欄に最初から入れておく URL（リンクを編集する時の、今のリンク先）
+   * @param {boolean} a_edit リンクを編集する時か
+   */
+  async askLinkUrl(a_value, a_edit) {
     const value = await vscode.window.showInputBox({
-      title: t('リンクにする'),
+      title: a_edit ? t('リンクを編集') : t('リンクにする'),
       prompt: t('リンク先の URL を入力してください'),
       placeHolder: 'https://',
+      value: a_value,
     });
     this.post({ cmd: 'linkUrl', url: (value || '').trim() });
   }

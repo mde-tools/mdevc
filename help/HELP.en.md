@@ -224,6 +224,13 @@ move the cursor with the arrow keys. When you hover over a link, its target is s
 - `#heading` links: move to that heading in the document.
 - Links to a Markdown file with a relative path (such as `other.md`): open that file in another VS Code tab.
 
+Right-click a link → "Link" for these commands (same as mde):
+
+- **Open Link**: opens the link, just like clicking it.
+- **Copy URL**: copies the link's URL.
+- **Edit Link…**: lets you enter a new URL for the link (the link text stays the same).
+- **Remove Link**: removes the link and leaves plain text.
+
 ## Outline
 
 The "mdevc Outline" view in the Explorer (side bar) of VS Code lists the headings of the current file with their

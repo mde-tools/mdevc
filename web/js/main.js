@@ -22,7 +22,7 @@
 //                {cmd:'openRecent', path, newWindow} / {cmd:'clearRecent'} / {cmd:'openRecentFolder', path, relPath, newWindow} /
 //                {cmd:'clearRecentFolders'} / {cmd:'close'} / {cmd:'openReadme'} /
 //                {cmd:'copyHtml', html, text} / {cmd:'importImages', id, srcs} /
-//                {cmd:'tableSizeDialog'} / {cmd:'linkDialog'} /
+//                {cmd:'tableSizeDialog'} / {cmd:'linkDialog', value?, edit?} /
 //                {cmd:'showMenu', name, x, y, items, buttons, keyboard, textColor} /
 //                {cmd:'confirmClose', files:[{path, markdown, images, current}]}
 //   host → web : {cmd:'load', path, name, docBase, markdown} /
@@ -80,6 +80,8 @@ function send(a_msg) {
 let tableAnchor = null;
 /** 右クリックの「リンクにする…」で、リンクにする選択範囲（ホストの linkUrl を待つ間だけ）。 */
 let linkRange = null;
+/** 右クリックの「リンクを編集…」で、リンク先を変えるリンク（ホストの linkUrl を待つ間だけ）。 */
+let linkEditTarget = null;
 const editor = new Editor($('doc'), {
   onChange: () => {
     setDirty(true);
@@ -116,6 +118,19 @@ const editor = new Editor($('doc'), {
     }
     linkRange = a_range;
     send({ cmd: 'linkDialog' });
+  },
+  // 右クリックの「リンクを編集…」：今のリンク先を入れたダイアログをホスト側で出す。編集するリンクは、結果（linkUrl）が
+  // 届くまで覚えておく。ブラウザ単体で開いた時（動作確認用）は prompt で聞く
+  onEditLink: (a_link) => {
+    const current = a_link.dataset.bare ? `mailto:${a_link.textContent.trim()}` : a_link.getAttribute('href') || '';
+    if (!host) {
+      const url = (prompt(t('リンク先のURLを入力してください'), current) || '').trim();
+      if (url) editor.editLink(a_link, url);
+      return;
+    }
+    linkRange = null;
+    linkEditTarget = a_link;
+    send({ cmd: 'linkDialog', value: current, edit: true });
   },
   // 右クリックの「ページトップに戻る」
   onPageTop: () => scrollToPageTop(),
@@ -2204,10 +2219,15 @@ if (host) {
       tableAnchor = null;
       if (msg.rows > 0 && msg.cols > 0 && !state.sourceMode) editor.insertTable(anchor, msg.rows, msg.cols);
     } else if ('linkUrl' === msg.cmd) {
-      // 右クリックの「リンクにする…」のダイアログを閉じた（url が空なら取りやめ）
+      // 右クリックの「リンクにする…」「リンクを編集…」のダイアログを閉じた（url が空なら取りやめ）
       const range = linkRange;
+      const target = linkEditTarget;
       linkRange = null;
-      if (msg.url && !state.sourceMode) editor.makeLink(range, msg.url);
+      linkEditTarget = null;
+      if (msg.url && !state.sourceMode) {
+        if (target) editor.editLink(target, msg.url);
+        else if (range) editor.makeLink(range, msg.url);
+      }
     } else if ('pdfExported' === msg.cmd) {
       // PDF に書き出し終わった（キャンセルした場合も）。印刷用の要素を空にする
       exportingPdf = false;

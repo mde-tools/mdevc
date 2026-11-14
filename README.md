@@ -55,6 +55,7 @@ Right-click in the document for the commands you use most:
 - Cut, Copy, **Copy for Excel**, Paste, **Paste without Formatting**
 - Bold, Italic, Underline, Strikethrough, Inline Code, Highlight
 - **Make Link…** and **Insert Table…**
+- On a link: **Open Link**, **Copy URL**, **Edit Link…**, and **Remove Link**
 - **Switch to Source Mode** and **Open Help**
 
 Commands that already apply to the selection are checked (✓). Right-click a table cell for table commands, and a

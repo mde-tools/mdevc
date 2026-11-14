@@ -37,7 +37,9 @@ export class Editor {
    * @param {object} a_handlers main.js に知らせるための関数
    * @param {() => void} a_handlers.onChange 内容が変わった（未保存の表示・アウトラインの更新用）
    * @param {(file: File) => void} a_handlers.onPasteImage 画像が貼り付けられた（ホストに保存を依頼する）
-   * @param {(href: string) => void} a_handlers.onOpenLink リンクがクリックされた
+   * @param {(href: string) => void} a_handlers.onOpenLink リンクがクリックされた（右クリックの「リンクを開く」も）
+   * @param {(link: HTMLAnchorElement) => void} a_handlers.onEditLink 右クリックの「リンクを編集…」（新しいリンク先を聞いて
+   *   editLink を呼ぶ）
    * @param {(href: string|null) => void} a_handlers.onHoverLink リンクの上にマウスが乗った（離れたら null）
    * @param {(message: string) => void} a_handlers.onError 利用者に知らせるエラー
    * @param {(src: string) => void} a_handlers.onOpenImage 画像を既定のアプリで開く（書かれたままの参照先）
@@ -994,8 +996,11 @@ export class Editor {
   applyInlineRule() {
     const sel = getSelection();
     if (!sel.isCollapsed || 3 !== sel.anchorNode.nodeType) return false;
+    if (sel.anchorNode.parentElement.closest('code,pre,.md-raw,a')) return false;
+    // 貼り付け・IME・前の変換の目印（ゼロ幅の空白）等で、文字のノードが分かれていることがあるため、隣り合う文字のノードを
+    // 1つにまとめてから調べる（「[表示する文字](」の後ろに URL を貼り付けてから「)」を打った時等も変換できるように）
+    mergeAdjacentTextAtCaret();
     const node = sel.anchorNode;
-    if (node.parentElement.closest('code,pre,.md-raw,a')) return false;
     const before = node.data.slice(0, sel.anchorOffset);
     if (this.applyLinkRule(node, before)) return true;
     const rules = [
@@ -1048,7 +1053,7 @@ export class Editor {
       const start = a_before.length - m[0].length;
       const prev = a_before[start - 1];
       if ('!' === prev || '\\' === prev) return false;
-      const fragment = htmlToFragment(renderInline(m[0]));
+      const fragment = htmlToFragment(renderInline(m[0].replace(/\u200b/g, '')));
       const link = fragment.firstChild;
       if (1 !== fragment.childNodes.length || !link || 'A' !== link.nodeName) return false;
       const sel = getSelection();
@@ -1549,12 +1554,14 @@ export class Editor {
       const src = imageSource(e.target);
       items.push({ label: t('画像を開く'), run: () => this.m_handlers.onOpenImage(src) }, null);
     }
+    const linkItem = this.linkMenuItem(e.target);
     if (this.m_readOnly) {
-      // 読み取り専用（ヘルプ）：編集しない項目だけ
+      // 読み取り専用（ヘルプ）：編集しない項目だけ（リンクは、開く・URLをコピーだけ）
       items.push(
         { label: t('コピー'), key: 'Ctrl+C', disabled: !hasSelection, run: () => document.execCommand('copy') },
         { label: t('Excel用にコピー'), disabled: !hasSelection, run: () => this.copyForExcel() },
         null,
+        ...(linkItem ? [linkItem, null] : []),
         { label: t('すべて選択'), key: 'Ctrl+A', run: () => this.selectAll() },
         null,
         { label: t('ソースモードに切り替え'), run: () => this.m_handlers.onToggleSource() });
@@ -1583,6 +1590,8 @@ export class Editor {
       const block = this.contextBlock(e.target);
       const heading = this.headingTarget(block);
       items.push(null);
+      // リンクの上：リンクを開く・URLをコピー・リンクを編集…・リンクを解除（mde と同じ）
+      if (linkItem) items.push(linkItem);
       if (heading) {
         const level = /^H[1-6]$/.test(heading.tagName) ? Number(heading.tagName[1]) : 0;
         items.push({
@@ -1597,6 +1606,7 @@ export class Editor {
       items.push({ label: t('表を挿入…'), run: () => this.m_handlers.onInsertTable(this.topLevelBlock(block)) });
     }
     if (cell && this.m_root.contains(cell)) {
+      if (linkItem) items.push(null, linkItem);
       const isHeader = 'TH' === cell.tagName;
       const table = (a_run) => () => {
         this.checkpoint('edit');
@@ -1621,6 +1631,56 @@ export class Editor {
     items.push(null, { label: t('ソースモードに切り替え'), run: () => this.m_handlers.onToggleSource() });
     if (this.m_handlers.onOpenHelp) items.push(null, { label: t('ヘルプを開く'), run: () => this.m_handlers.onOpenHelp() });
     showMenu(e.clientX, e.clientY, items, (a_item) => a_item.run());
+  }
+
+  /**
+   * 右クリックしたリンクの「リンク」のサブメニュー（mde と同じ：リンクを開く・URLをコピー・リンクを編集…・リンクを解除。
+   * 読み取り専用の時は、開く・URLをコピーだけ）。
+   * @param {Element} a_target 右クリックした要素
+   * @returns {object|null} メニューの項目（リンクの上でなければ null）
+   */
+  linkMenuItem(a_target) {
+    const link = a_target.closest && a_target.closest('a[href]');
+    if (!link || !this.m_root.contains(link)) return null;
+    // 文中にそのまま書いたメールアドレスのリンク（data-bare）は、今の文字のアドレス（クリックで開く時と同じ）
+    const url = link.dataset.bare ? `mailto:${link.textContent.replace(/\u200b/g, '').trim()}` : link.getAttribute('href');
+    const submenu = [
+      { label: t('リンクを開く'), run: () => this.m_handlers.onOpenLink(url) },
+      { label: t('URLをコピー'), run: () => writeClipboard({ text: url }) },
+    ];
+    if (!this.m_readOnly) {
+      submenu.push(
+        { label: t('リンクを編集…'), run: () => this.m_handlers.onEditLink(link) },
+        { label: t('リンクを解除'), run: () => this.removeLink(link) },
+      );
+    }
+    return { label: t('リンク'), submenu };
+  }
+
+  /**
+   * リンクのリンク先を変える（右クリックの「リンクを編集…」。mde と同じく、リンクの文字はそのままで、保存すると
+   * 「[文字](URL)」の形になる。<https://...> の形・文中にそのまま書いたメールアドレスも同じ）。
+   * @param {HTMLAnchorElement} a_link リンク
+   * @param {string} a_url 新しいリンク先
+   */
+  editLink(a_link, a_url) {
+    if (!this.m_root.contains(a_link)) return;
+    this.checkpoint('edit');
+    a_link.setAttribute('href', a_url);
+    delete a_link.dataset.auto;
+    delete a_link.dataset.bare;
+    this.changed();
+  }
+
+  /**
+   * リンクを解除して、普通の文字に戻す（右クリックの「リンクを解除」。中の太字等の書式はそのまま）。
+   * @param {HTMLAnchorElement} a_link リンク
+   */
+  removeLink(a_link) {
+    if (!this.m_root.contains(a_link)) return;
+    this.checkpoint('edit');
+    a_link.replaceWith(...a_link.childNodes);
+    this.changed();
   }
 
   /**
@@ -1792,6 +1852,11 @@ export class Editor {
     if (format.command) {
       // インラインコードの中の文字は太字等にできない（Markdown ではコードの中の書式は書けないため）
       if (anchor.closest('code') || focus.closest('code')) return { enabled: false, active: false };
+      // 下線：リンクの下線（見た目だけの下線）を、下線の書式とみなさない（<u> の中かどうかで決める）
+      if ('underline' === format.command) {
+        const own = anchor.closest('u');
+        return { enabled: true, active: !!own && this.m_root.contains(own) };
+      }
       return { enabled: true, active: document.queryCommandState(format.command) };
     }
     const own = anchor.closest(format.tag);
@@ -2407,6 +2472,32 @@ function caretRect(a_range) {
   if (rects.length) return rects[0];
   const el = 3 === node.nodeType ? node.parentElement : node;
   return el ? boxRect(el, false) : null;
+}
+
+/**
+ * カーソルのある文字のノードと、同じ親の中で隣り合う文字のノードを、1つのノードにまとめる（カーソルの位置は保つ）。
+ * 見た目は変わらない。
+ */
+function mergeAdjacentTextAtCaret() {
+  const sel = getSelection();
+  const node = sel.anchorNode;
+  if (!node || 3 !== node.nodeType) return;
+  let offset = sel.anchorOffset;
+  let first = node;
+  while (first.previousSibling && 3 === first.previousSibling.nodeType) {
+    first = first.previousSibling;
+    offset += first.data.length;
+  }
+  if (first === node && !(node.nextSibling && 3 === node.nextSibling.nodeType)) return;
+  let text = '';
+  for (let n = first; n && 3 === n.nodeType; n = n.nextSibling) text += n.data;
+  while (first.nextSibling && 3 === first.nextSibling.nodeType) first.nextSibling.remove();
+  first.data = text;
+  const range = document.createRange();
+  range.setStart(first, offset);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 /**

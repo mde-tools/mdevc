@@ -23,6 +23,7 @@ const EN = {
   '行数は 1〜{0} にしてください': 'The number of rows must be 1 to {0}',
   '列数は 1〜{0} にしてください': 'The number of columns must be 1 to {0}',
   'リンクにする': 'Make Link',
+  'リンクを編集': 'Edit Link',
   'リンク先の URL を入力してください': 'Enter the URL of the link',
   '見出しがありません。': 'There are no headings.',
   '見出しへ移動': 'Go to Heading',
