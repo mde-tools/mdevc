@@ -51,10 +51,11 @@ To edit a file as plain text, click **Reopen with Text Editor** at the top right
 
 Right-click in the document for the commands you use most:
 
+- Back to Top
 - Cut, Copy, **Copy for Excel**, Paste, **Paste without Formatting**
 - Bold, Italic, Underline, Strikethrough, Inline Code, Highlight
 - **Make Link…** and **Insert Table…**
-- Back to Top, **Switch to Source Mode**, and **Open Help**
+- **Switch to Source Mode** and **Open Help**
 
 Commands that already apply to the selection are checked (✓). Right-click a table cell for table commands, and a
 paragraph or heading to change the heading level.

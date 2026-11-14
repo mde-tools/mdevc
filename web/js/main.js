@@ -947,30 +947,32 @@ sourceArea.addEventListener('input', () => {
 });
 sourceArea.addEventListener('scroll', () => { sourceBackdrop.scrollTop = sourceArea.scrollTop; });
 
-// ソースモードの右クリック：切り取り・コピー・貼り付け・すべて選択と、「Markdownモードに切り替え」（mde と同じ）
+// ソースモードの右クリック：「ページトップに戻る」（一番上）、切り取り・コピー・貼り付け・すべて選択と、「Markdownモードに切り替え」（mde と同じ）
 sourceArea.addEventListener('contextmenu', (e) => {
   e.preventDefault();
   const hasSelection = sourceArea.selectionStart !== sourceArea.selectionEnd;
   if (state.readOnly) {
     // 読み取り専用（ヘルプ）：編集しない項目だけ
     showMenu(e.clientX, e.clientY, [
+      { label: t('ページトップに戻る'), run: () => scrollToPageTop() },
+      null,
       { label: t('コピー'), key: 'Ctrl+C', disabled: !hasSelection, run: () => document.execCommand('copy') },
       null,
       { label: t('すべて選択'), key: 'Ctrl+A', run: () => sourceArea.select() },
       null,
-      { label: t('ページトップに戻る'), run: () => scrollToPageTop() },
       { label: t('Markdownモードに切り替え'), run: () => setSourceMode(false) },
     ], (a_item) => a_item.run());
     return;
   }
   showMenu(e.clientX, e.clientY, [
+    { label: t('ページトップに戻る'), run: () => scrollToPageTop() },
+    null,
     { label: t('切り取り'), key: 'Ctrl+X', disabled: !hasSelection, run: () => document.execCommand('cut') },
     { label: t('コピー'), key: 'Ctrl+C', disabled: !hasSelection, run: () => document.execCommand('copy') },
     { label: t('貼り付け'), key: 'Ctrl+V', run: () => pasteIntoSource() },
     null,
     { label: t('すべて選択'), key: 'Ctrl+A', run: () => sourceArea.select() },
     null,
-    { label: t('ページトップに戻る'), run: () => scrollToPageTop() },
     { label: t('Markdownモードに切り替え'), run: () => setSourceMode(false) },
     ...(host ? [null, { label: t('ヘルプを開く'), run: () => send({ cmd: 'openHelp' }) }] : []),
   ], (a_item) => a_item.run());
