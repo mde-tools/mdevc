@@ -307,7 +307,34 @@ export class Editor {
     sel.removeAllRanges();
     sel.addRange(range);
     this.m_pasteRange = null;
+    this.breakLineAfterImage();
     this.changed();
+  }
+
+  /**
+   * 貼り付けた画像の後ろで改行して、次の行の先頭にカーソルを置く（続けて文字を書きやすいように。mde と同じ）。
+   * 改行のしかたは Enter キーと同じ（段落を分ける）。ただし、次の場合は Enter キーと違う：
+   *  - 箇条書きの項目と表のセルでは、Shift+Enter と同じく、同じ項目・セルの中で行を増やす（画像の後に、その項目・セルの
+   *    説明を続けて書けるように。表のセルの Enter は、下のセルへ移るため）
+   *  - 見出しでは、見出しの後ろに新しい段落を作る
+   * 画像の挿入と同じ「元に戻す」の1回にまとめる（ブラウザ標準の改行の操作（execCommand）は beforeinput を出さないため、
+   * 別の「元に戻す」にはならない）。
+   */
+  breakLineAfterImage() {
+    const block = this.currentTextBlock();
+    if (!block || block.closest('pre,.md-raw')) return;
+    const tag = block.tagName;
+    this.m_root.focus();
+    if ('LI' === tag || 'TD' === tag || 'TH' === tag) {
+      document.execCommand('insertLineBreak');
+    } else if (/^H[1-6]$/.test(tag)) {
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      block.after(p);
+      this.placeCaretAtStart(p);
+    } else {
+      document.execCommand('insertParagraph');
+    }
   }
 
   /**
@@ -678,6 +705,89 @@ export class Editor {
     return false;
   }
 
+  /**
+   * 表のセルの中で、カーソルが一番上（a_dir が -1）・一番下（1）の行にあるか（上下キーで、セルの中の行の間を移るか、
+   * 上下のセルへ移るかを決める。mde の TableEditor.IsCaretOnEdgeLine と同じ）。セルが空等で位置が分からない時は true。
+   * @param {HTMLTableCellElement} a_cell セル
+   * @param {number} a_dir -1：上、1：下
+   * @returns {boolean}
+   */
+  isCaretOnEdgeLine(a_cell, a_dir) {
+    const sel = getSelection();
+    if (!sel.rangeCount) return true;
+    const caret = sel.getRangeAt(0).cloneRange();
+    caret.collapse(a_dir < 0);
+    const rect = caretRect(caret);
+    const lines = cellLineRects(a_cell);
+    if (!rect || !lines.length) return true;
+    const half = Math.max(rect.height, 8) / 2;
+    if (a_dir < 0) return rect.top - Math.min(...lines.map((r) => r.top)) < half;
+    return Math.max(...lines.map((r) => r.bottom)) - rect.bottom < half;
+  }
+
+  /**
+   * 上下のセルへ移る（上下キーで一番上・一番下の行にいる時と、Enter）。上へ移る時はセルの一番下の行、下へ移る時は一番上の
+   * 行の、今のカーソルと同じ横の位置に置く（mde の TableEditor.MoveVertical と同じ）。表の一番上・一番下の行からは、表の
+   * 前・後ろのブロックへ移る（前・後ろに文字を書けるブロックが無ければ、空の段落を作る）。
+   * @param {HTMLTableCellElement} a_cell 今のセル
+   * @param {number} a_dir -1：上、1：下
+   * @returns {boolean} 文書を変更したか（段落を作った時）
+   */
+  moveVertical(a_cell, a_dir) {
+    const table = a_cell.closest('table');
+    const rows = [...table.rows];
+    const row = rows[rows.indexOf(a_cell.parentElement) + a_dir];
+    const sel = getSelection();
+    if (!row) {
+      // 表の外へ：前のブロックの最後・後ろのブロックの先頭
+      const neighbor = a_dir < 0 ? table.previousElementSibling : table.nextElementSibling;
+      const blocks = neighbor ? (neighbor.matches(TEXT_BLOCK_SELECTOR) ? [neighbor] : [...neighbor.querySelectorAll(TEXT_BLOCK_SELECTOR)]) : [];
+      if (!blocks.length) {
+        this.checkpoint('edit');
+        const p = document.createElement('p');
+        p.appendChild(document.createElement('br'));
+        if (a_dir < 0) table.before(p);
+        else table.after(p);
+        this.placeCaretAtStart(p);
+        p.scrollIntoView({ block: 'nearest' });
+        return true;
+      }
+      if (a_dir < 0) placeCaretAtEnd(blocks[blocks.length - 1]);
+      else this.placeCaretAtStart(blocks[0]);
+      blocks[a_dir < 0 ? blocks.length - 1 : 0].scrollIntoView({ block: 'nearest' });
+      return false;
+    }
+    const target = row.cells[Math.min(a_cell.cellIndex, row.cells.length - 1)];
+    // 今のカーソルの横の位置で、移る先のセルの一番下（上へ移る時）・一番上（下へ移る時）の行の位置を探す
+    let x = null;
+    if (sel.rangeCount) {
+      const caret = sel.getRangeAt(0).cloneRange();
+      caret.collapse(a_dir < 0);
+      const rect = caretRect(caret);
+      if (rect) x = rect.left;
+    }
+    target.scrollIntoView({ block: 'nearest' });
+    const lines = cellLineRects(target);
+    let range = null;
+    if (null !== x && lines.length && document.caretRangeFromPoint) {
+      const line = a_dir < 0 ? lines.reduce((a, b) => (b.bottom > a.bottom ? b : a)) : lines.reduce((a, b) => (b.top < a.top ? b : a));
+      const box = target.getBoundingClientRect();
+      const px = Math.min(Math.max(x, box.left + 1), box.right - 1);
+      const hit = document.caretRangeFromPoint(px, line.top + line.height / 2);
+      if (hit && target.contains(hit.startContainer)) range = hit;
+    }
+    if (range) {
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else if (a_dir < 0) {
+      placeCaretAtEnd(target);
+    } else {
+      this.placeCaretAtStart(target);
+    }
+    return false;
+  }
+
   // ===== 入力のイベント =====
 
   /**
@@ -714,7 +824,7 @@ export class Editor {
 
   /**
    * Shift+Enter で入れた改行は、Markdown のソースの改行（1行の終わり）として保存する。
-   * 印の無い <br> は、ソースに書かれていた「<br>」として保存される）。
+   * 印の無い <br> は、ソースに書かれていた「<br>」として保存される。表のセルの中は「<br>」のまま）。
    */
   markSoftBreak() {
     const sel = getSelection();
@@ -722,7 +832,8 @@ export class Editor {
     const node = sel.anchorNode;
     let prev = 3 === node.nodeType ? (0 === sel.anchorOffset ? node.previousSibling : null) : node.childNodes[sel.anchorOffset - 1];
     while (prev && 3 === prev.nodeType && '' === prev.data) prev = prev.previousSibling;
-    if (prev && 'BR' === prev.nodeName && !prev.parentElement.closest('pre,.md-raw')) prev.dataset.soft = '1';
+    // 表のセルの中の改行は、ソースの改行にできない（表の1行が途切れる）ため、印を付けず「<br>」として保存する
+    if (prev && 'BR' === prev.nodeName && !prev.parentElement.closest('pre,.md-raw,td,th')) prev.dataset.soft = '1';
   }
 
   /** 入力された文字に応じて、見た目の書式に変換する（applyBlockRule・applyInlineRule）。 */
@@ -924,6 +1035,16 @@ export class Editor {
     }
     const block = this.currentTextBlock();
     if (!block) return;
+    if (('ArrowUp' === key || 'ArrowDown' === key) && !e.shiftKey && !e.altKey && !e.metaKey && ('TD' === block.tagName || 'TH' === block.tagName)) {
+      // 表のセルの中の上下キー：セルの中に複数の行がある時は、行の間を移る（ブラウザ標準の動き）。一番上・一番下の行では、
+      // 上・下のセルへ移る（ブラウザ標準では、同じ行の隣のセルへ移ってしまうため。mde と同じ）
+      const dir = 'ArrowUp' === key ? -1 : 1;
+      if (this.isCaretOnEdgeLine(block, dir)) {
+        e.preventDefault();
+        if (this.moveVertical(block, dir)) this.changed();
+      }
+      return;
+    }
     // Enter の直前に書いたメールアドレスは、mailto のリンクにする（linkifyEmailBeforeCaret）
     if ('Enter' === key && !e.ctrlKey && !e.altKey && this.linkifyEmailBeforeCaret(false)) this.changed();
     if ('Enter' === key && !e.shiftKey) {
@@ -955,8 +1076,9 @@ export class Editor {
       return true;
     }
     if ('TD' === tag || 'TH' === tag) {
-      e.preventDefault(); // 表のセルの中では改行しない
-      return false;
+      // 表のセルで Enter：下のセルへ移る（mde・Typora 等と同じ。セルの中の改行は Shift+Enter）。最後の行では表の外へ出る
+      e.preventDefault();
+      return this.moveVertical(a_block, 1);
     }
     if ('LI' === tag && '' === this.ownText(a_block)) {
       // 空の項目で Enter：リストから抜ける（入れ子なら1段上に戻る）。チェックボックスの項目も同じ
@@ -2154,6 +2276,56 @@ function isEmptyBlock(a_el) {
 function removePlaceholderBreak(a_el) {
   const last = a_el.lastChild;
   if (last && 'BR' === last.nodeName && !last.dataset.soft) last.remove();
+}
+
+/**
+ * カーソル（つぶれた範囲）の位置の四角形（幅 0。上下キーで、今の行・横の位置を知るために使う）。
+ * つぶれた範囲の四角形は、行の境目（改行の直後等）や要素の終わりでは取れない・前の行になることがあるため、
+ * 隣の1文字の四角形から作る（後ろの文字があればその左端、無ければ前の文字の右端）。
+ * @param {Range} a_range つぶれた範囲
+ * @returns {DOMRect|null} 取れなければ null
+ */
+function caretRect(a_range) {
+  const node = a_range.startContainer;
+  const offset = a_range.startOffset;
+  const charRect = (a_text, a_index, a_right) => {
+    const r = document.createRange();
+    r.setStart(a_text, a_index);
+    r.setEnd(a_text, a_index + 1);
+    const rects = r.getClientRects();
+    const rc = rects[a_right ? rects.length - 1 : 0];
+    return rc ? new DOMRect(a_right ? rc.right : rc.left, rc.top, 0, rc.height) : null;
+  };
+  const boxRect = (a_el, a_right) => {
+    const rc = a_el.getBoundingClientRect();
+    return rc.width || rc.height ? new DOMRect(a_right ? rc.right : rc.left, rc.top, 0, Math.min(rc.height, 24)) : null;
+  };
+  if (3 === node.nodeType) {
+    if (offset < node.length) return charRect(node, offset, false);
+    if (offset > 0) return charRect(node, offset - 1, true);
+  } else {
+    const next = node.childNodes[offset];
+    const prev = node.childNodes[offset - 1];
+    if (next && 3 === next.nodeType && next.length) return charRect(next, 0, false);
+    if (prev && 3 === prev.nodeType && prev.length) return charRect(prev, prev.length - 1, true);
+    if (next && 1 === next.nodeType) return boxRect(next, false);
+    if (prev && 1 === prev.nodeType && 'BR' !== prev.nodeName) return boxRect(prev, true);
+  }
+  const rects = a_range.getClientRects();
+  if (rects.length) return rects[0];
+  const el = 3 === node.nodeType ? node.parentElement : node;
+  return el ? boxRect(el, false) : null;
+}
+
+/**
+ * セルの中身の行の四角形（行ごと・文字のかたまりごと）。中身が無ければ空の配列。
+ * @param {HTMLTableCellElement} a_cell セル
+ * @returns {DOMRect[]}
+ */
+function cellLineRects(a_cell) {
+  const range = document.createRange();
+  range.selectNodeContents(a_cell);
+  return [...range.getClientRects()].filter((r) => r.height > 0);
 }
 
 /**

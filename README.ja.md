@@ -79,7 +79,8 @@ VS Code 標準の Markdown プレビューの見た目が好みなら、設定�
 
 **箇条書き：** Enter で次の項目、Tab・Shift+Tab で字下げ・字下げ解除、Shift+Enter で項目の中で改行、
 空の項目で Enter を押すと箇条書きを抜けます。
-**表：** Tab・Shift+Tab でセルを移動（最後のセルで Tab を押すと行を追加）、Ctrl+Enter で下に行を挿入します。
+**表：** Tab・Shift+Tab でセルを移動（最後のセルで Tab を押すと行を追加）、Enter で下のセルへ移動、Shift+Enter でセルの中で改行、
+Ctrl+Enter で下に行を挿入します。
 
 ## 検索・移動・ソースの表示
 

@@ -80,7 +80,8 @@ paragraph or heading to change the heading level.
 
 **Lists:** Enter adds an item, Tab / Shift+Tab indents / outdents, Shift+Enter breaks the line inside an item,
 and Enter on an empty item leaves the list.
-**Tables:** Tab / Shift+Tab move between cells (Tab in the last cell adds a row), Ctrl+Enter inserts a row below.
+**Tables:** Tab / Shift+Tab move between cells (Tab in the last cell adds a row), Enter moves to the cell below,
+Shift+Enter breaks the line inside a cell, Ctrl+Enter inserts a row below.
 
 ## Find, navigate, and view the source
 

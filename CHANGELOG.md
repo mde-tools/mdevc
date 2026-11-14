@@ -1,6 +1,9 @@
-# Change Log / 変更履歴
+# Change Log
+
+## 1.0.1
+
+* Improve the README
 
 ## 1.0.0
 
-- Initial release.
-- 最初の版
+- Initial release

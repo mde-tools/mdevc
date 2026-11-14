@@ -502,7 +502,8 @@ export function renderInline(a_text, a_inLink = false) {
     if ('*' === ch || '_' === ch || '~' === ch || '=' === ch) {
       const em = parseEmphasisAt(s, i);
       if (em) {
-        out += `<${em.tag}>${renderInline(em.inner, a_inLink)}</${em.tag}>`;
+        const mark = em.mark ? ` data-mark="${em.mark}"` : '';
+        out += `<${em.tag}${mark}>${renderInline(em.inner, a_inLink)}</${em.tag}>`;
         i = em.end;
         continue;
       }
@@ -619,6 +620,8 @@ function parseLinkAt(a_s, a_pos) {
  */
 function parseEmphasisAt(a_s, a_pos) {
   const ch = a_s[a_pos];
+  // 「*」は、太字と斜体が重なった「***」や、閉じ側の「*」が続いた「****」も読めるよう、別に読む（parseStarEmphasisAt）
+  if ('*' === ch) return parseStarEmphasisAt(a_s, a_pos);
   const prev = a_s[a_pos - 1] || '';
   const doubled = a_s[a_pos + 1] === ch;
   if (('~' === ch || '=' === ch) && !doubled) return null;
@@ -646,9 +649,153 @@ function parseEmphasisAt(a_s, a_pos) {
     if ('_' === ch && /[\p{L}\p{N}]/u.test(next)) { j = k + 1; continue; }
     // 取り消し線は <s>（ブラウザ標準の取り消し線の切り替え（execCommand）が <del> を解除できないため）
     const tag = '~' === ch ? 's' : '=' === ch ? 'mark' : 2 === len ? 'strong' : 'em';
-    return { tag, inner: a_s.slice(a_pos + len, k), end: k + len };
+    // 「_」で囲んだ斜体は、保存する時も「_」で書く（mark。serializeInline）
+    return { tag, inner: a_s.slice(a_pos + len, k), end: k + len, mark: 'em' === tag && '_' === ch ? '_' : '' };
   }
   return null;
+}
+
+/**
+ * 「*」で始まる **太字**・*斜体* を読む（mde の TryParseEmphasis と同じ考え方）。
+ *  - 「***」で始まる時は、斜体を外側として読み（「***a***」「***a** b*」）、読めなければ太字を外側にする（「***a* b**」）
+ *  - 太字の閉じ側が3つ以上の「*」の並び（「**a *b***」「**a *b****c*」）の時は、中身に閉じていない「*」が残っていれば、
+ *    並びの2つ目から2つを太字の閉じとする（1つ目は中身の斜体の閉じ。残りは、後ろの書式の開き側）
+ *  - 斜体の中身の中の「**」は、太字として飛ばして閉じ側を探す。太字として読めない「**」の1つ目は、閉じ側にしてよい
+ * 開き側の後ろ・閉じ側の前が空白の場合と、中身が空の場合は書式にしない。インラインコードの中の「*」は使わない。
+ * @param {string} a_s 文字列
+ * @param {number} a_pos 開き側の「*」の位置
+ * @returns {{tag:string, inner:string, end:number, mark:string}|null} parseEmphasisAt と同じ
+ */
+function parseStarEmphasisAt(a_s, a_pos) {
+  const run = countRun(a_s, a_pos, '*');
+  const after = a_s[a_pos + run] || '';
+  if ('' === after || /\s/.test(after)) return null;
+  if (run >= 3) {
+    // 斜体を外側にする読み方と、太字を外側にする読み方（中身が斜体で始まる時だけ。「***a**」は、1つ目の「*」を文字として
+    // 読む）の両方で読めたら、内側の書式が先に閉じる方にする（「***a* b**」は太字が外側、「***a** b*」は斜体が外側）
+    const italic = parseStarItalic(a_s, a_pos, true);
+    const bold = parseStarBold(a_s, a_pos);
+    const boldInner = bold ? parseStarItalic(bold.inner, 0, false) : null;
+    if (!boldInner) return italic;
+    if (!italic) return bold;
+    const italicInner = parseStarBold(a_s, a_pos + 1);
+    return a_pos + 2 + boldInner.end < (italicInner ? italicInner.end : Infinity) ? bold : italic;
+  }
+  if (2 === run) return parseStarBold(a_s, a_pos);
+  return parseStarItalic(a_s, a_pos, false);
+}
+
+/**
+ * a_pos からの **太字** を読む（parseStarEmphasisAt 参照）。
+ * @param {string} a_s 文字列
+ * @param {number} a_pos 開き側の「**」の位置
+ * @returns {{tag:string, inner:string, end:number, mark:string}|null}
+ */
+function parseStarBold(a_s, a_pos) {
+  const start = a_pos + 2;
+  let j = start;
+  while (j <= a_s.length) {
+    let k = indexOfOutsideCode(a_s, '**', j);
+    if (k < 0) return null;
+    if (k === start || '\\' === a_s[k - 1]) { j = k + 1; continue; } // 中身は1文字以上
+    const run = countRun(a_s, k, '*');
+    if (/\s/.test(a_s[k - 1])) { j = k + run; continue; }
+    // 閉じ側が3つ以上の並び：中身に閉じていない「*」（1つだけの並びが奇数個）があれば、その閉じの後ろの2つを使う
+    if (run >= 3 && 1 === countSingleStars(a_s, start, k) % 2) k += 1;
+    return { tag: 'strong', inner: a_s.slice(start, k), end: k + 2, mark: '' };
+  }
+  return null;
+}
+
+/**
+ * a_pos からの *斜体* を読む（parseStarEmphasisAt 参照）。
+ * @param {string} a_s 文字列
+ * @param {number} a_pos 開き側の「*」の位置
+ * @param {boolean} a_triple 開き側が「***」の並びか（開き側の直後の「**」を、中身の太字の開き側として読む）
+ * @returns {{tag:string, inner:string, end:number, mark:string}|null}
+ */
+function parseStarItalic(a_s, a_pos, a_triple) {
+  const start = a_pos + 1;
+  if (!a_triple && '*' === a_s[start]) return null;
+  let j = start;
+  while (j < a_s.length) {
+    const k = indexOfOutsideCode(a_s, '*', j);
+    if (k < 0) return null;
+    if ('\\' === a_s[k - 1]) { j = k + 1; continue; }
+    const run = countRun(a_s, k, '*');
+    // 「*x***y**」のような、斜体の閉じと太字の開きが続いた並び：並びの前後が空白でなく、長さが CommonMark の「3の倍数の
+    // 規則」に当たらない（1＋並びの長さが3の倍数でない）時は、並びの1つ目を斜体の閉じにする（「*a**b**c*」の「**」は太字の開き）
+    if (run >= 2 && k > start && !/\s/.test(a_s[k - 1]) && 0 !== (1 + run) % 3) {
+      return { tag: 'em', inner: a_s.slice(start, k), end: k + 1, mark: '' };
+    }
+    if (run >= 2 || (a_triple && k === start)) {
+      // 中身の中の太字：その閉じ側の後ろから探し直す
+      const bold = parseStarBold(a_s, k);
+      if (bold) { j = bold.end; continue; }
+      if (k === start) return null;
+    }
+    if (k === start || /\s/.test(a_s[k - 1])) { j = k + run; continue; }
+    return { tag: 'em', inner: a_s.slice(start, k), end: k + 1, mark: '' };
+  }
+  return null;
+}
+
+/**
+ * a_pos から続く a_ch の並びの長さ。
+ * @param {string} a_s 文字列
+ * @param {number} a_pos 位置
+ * @param {string} a_ch 文字
+ * @returns {number}
+ */
+function countRun(a_s, a_pos, a_ch) {
+  let k = a_pos;
+  while (a_ch === a_s[k]) k++;
+  return k - a_pos;
+}
+
+/**
+ * a_from〜a_to の間の、1つだけの「*」の並びの数（インラインコードの中・エスケープした「*」は数えない）。
+ * @param {string} a_s 文字列
+ * @param {number} a_from 数え始める位置
+ * @param {number} a_to 数え終わる位置（含まない）
+ * @returns {number}
+ */
+function countSingleStars(a_s, a_from, a_to) {
+  let count = 0;
+  let k = a_from;
+  while (k < a_to) {
+    const star = indexOfOutsideCode(a_s, '*', k);
+    if (star < 0 || star >= a_to) break;
+    if ('\\' === a_s[star - 1]) { k = star + 1; continue; } // エスケープした「*」は数えない
+    const run = Math.min(countRun(a_s, star, '*'), a_to - star);
+    if (1 === run) count++;
+    k = star + run;
+  }
+  return count;
+}
+
+/**
+ * a_from から a_value を探す。インラインコード（`…`）の中にあるものは飛ばす。
+ * @param {string} a_s 文字列
+ * @param {string} a_value 探す文字列
+ * @param {number} a_from 探し始める位置
+ * @returns {number} 見つかった位置。無ければ -1
+ */
+function indexOfOutsideCode(a_s, a_value, a_from) {
+  let from = a_from;
+  while (from <= a_s.length) {
+    const k = a_s.indexOf(a_value, from);
+    const tick = a_s.indexOf('`', from);
+    if (tick < 0 || (k >= 0 && k < tick)) return k;
+    const ticks = countRun(a_s, tick, '`');
+    const close = '\\' === a_s[tick - 1] ? -1 : findCodeClose(a_s, tick + ticks, ticks);
+    if (close < 0) {
+      from = tick + ticks;
+      continue;
+    }
+    from = close + ticks;
+  }
+  return -1;
 }
 
 /**
@@ -749,7 +896,8 @@ export function escapeText(a_text) {
   t = t.replace(/\\(?=[!-/:-@[-`{-~])/g, '\\\\');
   t = t.replace(/[*`]/g, '\\$&');
   t = t.replace(/~~/g, '\\~\\~').replace(/==/g, '\\=\\=');
-  t = t.replace(/(^|[^\p{L}\p{N}])_|_(?=[^\p{L}\p{N}]|$)/gu, (m) => m.replace('_', '\\_'));
+  // 単語の途中でない「_」（前か後ろが英数字でない）はエスケープする（「__」の2つ目も漏らさないよう、前の文字は先読みで見る）
+  t = t.replace(/(?<![\p{L}\p{N}])_|_(?![\p{L}\p{N}])/gu, '\\_');
   t = t.replace(/<(?=[a-zA-Z/!])/g, '\\<');
   // 「[」は、後ろに「](」「][」が続いてリンクと誤解される場合だけエスケープする（[画像] 等はそのまま）
   if (/\]\(|\]\[/.test(t)) t = t.replace(/\[/g, '\\[');
@@ -774,77 +922,338 @@ function titlePart(a_title) {
   return a_title ? ` "${a_title.replace(/"/g, '\\"')}"` : '';
 }
 
-/** 書式の要素 → 入れ子で同じ書式が重なった時に記号を付けないための名前（serializeInline）。 */
+/** 書式の要素 → 書式の名前（serializeInline）。b：太字、i：斜体、s：取り消し線、m：ハイライト、u：下線。 */
 const FORMAT_KIND = { STRONG: 'b', B: 'b', EM: 'i', I: 'i', DEL: 's', S: 's', STRIKE: 's', MARK: 'm', U: 'u' };
+
+/** 範囲が同じ長さの書式を開く時の順（外側から。mde の InlineStyles.STACKABLE_ORDER と同じ考え方）。 */
+const FORMAT_ORDER_LIST = ['s', 'b', 'i', 'm', 'u'];
+
+/** 書式の記号（開き側・閉じ側）。斜体の記号（「*」か「_」）は、書き出す時に決める（serializeInline）。 */
+const FORMAT_MARKERS = { b: ['**', '**'], s: ['~~', '~~'], m: ['==', '=='], u: ['<u>', '</u>'] };
+
+/** 英数字等の単語の文字（「_」の斜体の前後に来ると、「_」が単語の途中の文字として読まれる）。 */
+const RE_WORD_CHAR = /[\p{L}\p{N}_]/u;
 
 /**
  * 段落などの中身（要素の子）を Markdown の1行（または改行を含む文字列）にする。
+ * 書式は、要素の入れ子のまま書くのではなく、文字ごとの書式から書き直す（mde の WriteMarkdownInlineItems と同じ考え方）：
+ *  - 書式の範囲の先頭・末尾の空白は、記号の外に出す（「**foo **」は読み直すと太字にならないため）。空白だけの書式は書かない
+ *  - 隣り合う同じ書式は1つにまとめる（「**a****b**」にしない）
+ *  - 範囲が重なった書式（太字の途中から外まで斜体を付けた等）は、長く続く方を外側にして、内側を分けて書く
+ *  - 閉じた記号の直後に別の「*」の記号を開く所は、斜体を「_」で書いて、記号の並びを読み違えないようにする（書ける時だけ）
+ *  - 「_斜体_」で書かれていた斜体（data-mark）は、書ける時は「_」のまま書く
+ * Shift+Enter 等の改行（<br>）は、前後の文字と同じ書式なら書式を途切れさせない。
  * @param {Element} a_el 段落・見出し・セル・リストの項目等の要素
- * @param {string} [a_open] 外側ですでに付いている書式（FORMAT_KIND の名前を並べたもの）。太字の中の太字等、同じ書式が
- *   入れ子になった時（太字の中に、太字を含む文字を貼り付けた時等）は、内側の記号を書かない（書くと「**a **b** c**」の
- *   ように、読み直した時に別の範囲が太字になる）
+ * @param {string} [a_open] 外側ですでに付いている書式（FORMAT_KIND の名前を並べたもの。リンクの中の文字等）。
+ *   その書式の記号は書かない（書くと「**a **b** c**」のように、読み直した時に別の範囲が太字になる）
  * @returns {string} Markdown。Shift+Enter 等の改行（data-soft の <br>）は改行文字になる
  */
 export function serializeInline(a_el, a_open = '') {
-  let out = '';
-  // 子のノードを順に、文字はエスケープして、書式の要素は対応する記号で囲んで書き出す
+  const items = [];
+  collectInlineItems(a_el, a_open, false, items);
+  if (!items.length) return '';
+  const outer = new Set(a_open);
+  // 改行（<br>）の書式は、前後の文字に共通の書式にする（前後が同じ書式なら、書式を途切れさせない）
+  for (let n = 0; n < items.length; n++) {
+    if ('br' !== items[n].type) continue;
+    let p = n - 1;
+    while (p >= 0 && 'br' === items[p].type) p--;
+    let q = n + 1;
+    while (q < items.length && 'br' === items[q].type) q++;
+    const before = p >= 0 ? items[p].styles : new Set();
+    const after = q < items.length ? items[q].styles : new Set();
+    items[n].styles = new Set([...before].filter((k) => after.has(k)));
+  }
+  for (const item of items) for (const k of outer) item.styles.delete(k);
+  trimFormatWhiteSpace(items);
+  return writeInlineItems(groupInlineItems(items));
+}
+
+/**
+ * 要素の子を、書式付きの項目の並びにする（serializeInline）。文字は文字のノードごと（先頭・末尾の空白は別）の項目、インラインコード・リンク・画像は
+ * それぞれ1つの項目（書き出した Markdown を持つ）、改行は改行の項目にする。
+ * @param {Element} a_el 要素
+ * @param {string} a_styles 外側の書式（FORMAT_KIND の名前を並べたもの）
+ * @param {boolean} a_underscore 外側の斜体が「_」で書かれていたか
+ * @param {object[]} a_out 項目を足す配列（{type:'text'|'atom'|'br', text, styles:Set, underscore}）
+ */
+function collectInlineItems(a_el, a_styles, a_underscore, a_out) {
   for (const node of a_el.childNodes) {
-    if (3 === node.nodeType) { out += escapeText(node.data); continue; }
+    if (3 === node.nodeType) {
+      // 先頭・末尾の空白は別の項目にする（書式の範囲の端の空白を、記号の外に出すため。trimFormatWhiteSpace）
+      const m = node.data.replace(/\u200b/g, '').match(/^(\s*)([\s\S]*?)(\s*)$/);
+      for (const part of [m[1], m[2], m[3]]) {
+        if (part) a_out.push({ type: 'text', text: part, styles: new Set(a_styles), underscore: a_underscore });
+      }
+      continue;
+    }
     if (1 !== node.nodeType) continue;
     const tag = node.tagName;
     const kind = FORMAT_KIND[tag];
-    if (kind && a_open.includes(kind)) {
-      out += serializeInline(node, a_open); // 外側と同じ書式：記号を付けずに中身だけ
+    if (kind) {
+      const underscore = a_styles.includes('i') ? a_underscore : 'i' === kind && '_' === node.dataset.mark;
+      collectInlineItems(node, a_styles.includes(kind) ? a_styles : a_styles + kind, underscore, a_out);
       continue;
     }
-    const inner = () => serializeInline(node, kind ? a_open + kind : a_open);
+    const atom = (a_text) => a_out.push({ type: 'atom', text: a_text, styles: new Set(a_styles), underscore: a_underscore });
     switch (tag) {
       case 'BR':
         // 最後の <br> は、空の行を表示するためにブラウザが置いたもの
         if (node === a_el.lastChild && !node.dataset.soft) break;
-        out += node.dataset.soft ? '\n' : '<br>';
+        a_out.push({ type: 'br', text: node.dataset.soft ? '\n' : '<br>', styles: new Set(), underscore: false });
         break;
-      case 'STRONG': case 'B': { const t = inner(); if (t) out += `**${t}**`; break; }
-      case 'EM': case 'I': { const t = inner(); if (t) out += `*${t}*`; break; }
-      case 'DEL': case 'S': case 'STRIKE': { const t = inner(); if (t) out += `~~${t}~~`; break; }
-      case 'MARK': { const t = inner(); if (t) out += `==${t}==`; break; }
-      case 'U': { const t = inner(); if (t) out += `<u>${t}</u>`; break; }
       case 'CODE': {
-        const code = node.textContent.replace(/\u00a0/g, ' ').replace(/\u200b/g, '');
+        let code = node.textContent.replace(/\u00a0/g, ' ').replace(/\u200b/g, '');
         if (!code) break;
+        // 隣り合うインラインコードは1つにまとめる（「`a``b`」と書くと、読み直した時に別の形になるため）
+        const last = a_out[a_out.length - 1];
+        if (last && 'atom' === last.type && undefined !== last.code && [...last.styles].sort().join('') === [...a_styles].sort().join('')) {
+          code = last.code + code;
+          a_out.pop();
+        }
         const longest = Math.max(0, ...(code.match(/`+/g) || []).map((r) => r.length));
         const fence = '`'.repeat(longest + 1);
         const pad = code.startsWith('`') || code.endsWith('`') ? ' ' : '';
-        out += `${fence}${pad}${code}${pad}${fence}`;
+        atom(`${fence}${pad}${code}${pad}${fence}`);
+        a_out[a_out.length - 1].code = code;
         break;
       }
       case 'A': {
         const href = node.getAttribute('href') || '';
         if (node.dataset.bare) {
           // 文中にそのまま書かれていたメールアドレス（renderInline 参照）：書かれたままの文字を書き出す
-          out += node.textContent;
+          atom(node.textContent);
         } else if (node.dataset.auto) {
           // <https://...> や <name@example.com> の形で書かれていたリンク
           const text = node.textContent;
-          out += `<${href.startsWith('mailto:') && !text.startsWith('mailto:') ? text : href}>`;
+          atom(`<${href.startsWith('mailto:') && !text.startsWith('mailto:') ? text : href}>`);
         } else {
-          out += `[${inner()}](${linkDestination(href)}${titlePart(node.getAttribute('title'))})`;
+          atom(`[${serializeInline(node, a_styles)}](${linkDestination(href)}${titlePart(node.getAttribute('title'))})`);
         }
         break;
       }
       case 'IMG':
         // HTML のタグで書かれていた画像は、書かれたままのタグで書き出す
-        if (node.dataset.html) out += node.dataset.html;
-        else out += `![${(node.getAttribute('alt') || '').replace(/[[\]]/g, '\\$&')}](${linkDestination(imageSource(node))}${titlePart(node.getAttribute('title'))})`;
+        if (node.dataset.html) atom(node.dataset.html);
+        else atom(`![${(node.getAttribute('alt') || '').replace(/[[\]]/g, '\\$&')}](${linkDestination(imageSource(node))}${titlePart(node.getAttribute('title'))})`);
         break;
       case 'INPUT':
         break;
       case 'UL': case 'OL': case 'P': case 'DIV': case 'PRE': case 'BLOCKQUOTE': case 'TABLE':
         break; // ブロック要素は serializeBlock 側で扱う
       default:
-        out += inner();
+        collectInlineItems(node, a_styles, a_underscore, a_out);
     }
   }
+}
+
+/**
+ * 項目が空白（記号の内側に置けないもの）か。
+ * @param {object} a_item 項目
+ * @returns {boolean}
+ */
+function isWhiteSpaceItem(a_item) {
+  return 'br' === a_item.type || ('text' === a_item.type && /^\s+$/.test(a_item.text));
+}
+
+/**
+ * 書式ごとに、続いている範囲の先頭・末尾の空白（と改行）から、その書式を外す（記号の内側に空白を置かない）。
+ * @param {object[]} a_items 項目
+ */
+function trimFormatWhiteSpace(a_items) {
+  for (const k of FORMAT_ORDER_LIST) {
+    let n = 0;
+    while (n < a_items.length) {
+      if (!a_items[n].styles.has(k)) { n++; continue; }
+      let end = n;
+      while (end < a_items.length && a_items[end].styles.has(k)) end++;
+      let first = n;
+      while (first < end && isWhiteSpaceItem(a_items[first])) a_items[first++].styles.delete(k);
+      let last = end - 1;
+      while (last >= first && isWhiteSpaceItem(a_items[last])) a_items[last--].styles.delete(k);
+      n = end;
+    }
+  }
+}
+
+/**
+ * 同じ書式の続く文字を1つの項目にまとめる。
+ * @param {object[]} a_items 項目
+ * @returns {object[]} まとめた項目
+ */
+function groupInlineItems(a_items) {
+  const out = [];
+  const key = (a_styles) => [...a_styles].sort().join('');
+  for (const item of a_items) {
+    const last = out[out.length - 1];
+    if ('text' === item.type && last && 'text' === last.type && key(last.styles) === key(item.styles)) {
+      last.text += item.text;
+    } else {
+      out.push({ ...item });
+    }
+  }
+  return out;
+}
+
+/**
+ * 記号の内側に来た空白を、記号の外へ出す（writeInlineItems）。書式の範囲の端の空白は trimFormatWhiteSpace で外して
+ * あるが、範囲が重なった書式を分けて書く所（閉じてすぐ開き直す所）では、開き直した記号の直後に空白が来ることがある。
+ * 記号の並び（閉じ側→開き側の順）の前の文字の末尾の空白と、後ろの文字の先頭の空白を、閉じ側と開き側の間に移す。
+ * @param {object[]} a_tokens 記号と項目の並び（書き換える）
+ */
+function moveWhiteSpaceOutOfMarkers(a_tokens) {
+  for (let t = 0; t < a_tokens.length;) {
+    if ('item' === a_tokens[t].type) { t++; continue; }
+    let end = t;
+    while (end < a_tokens.length && 'item' !== a_tokens[end].type) end++;
+    let split = t;
+    while (split < end && 'close' === a_tokens[split].type) split++;
+    // 閉じ側の前の空白（改行の項目・文字の末尾の空白）と、開き側の後ろの空白を集める（空白だけの項目は、続けてその先も見る）
+    const before = [];
+    if (split > t) {
+      while (t > 0) {
+        const prev = a_tokens[t - 1].item;
+        if ('br' === prev.type || ('text' === prev.type && /^\s+$/.test(prev.text))) {
+          before.unshift(prev);
+          a_tokens.splice(t - 1, 1);
+          t--; end--; split--;
+          continue;
+        }
+        const m = 'text' === prev.type ? prev.text.match(/\s+$/) : null;
+        if (m) {
+          before.unshift({ type: 'text', text: m[0], styles: new Set() });
+          prev.text = prev.text.slice(0, -m[0].length);
+        }
+        break;
+      }
+    }
+    const after = [];
+    if (split < end) {
+      while (end < a_tokens.length && 'item' === a_tokens[end].type) {
+        const next = a_tokens[end].item;
+        if ('br' === next.type || ('text' === next.type && /^\s+$/.test(next.text))) {
+          after.push(next);
+          a_tokens.splice(end, 1);
+          continue;
+        }
+        const m = 'text' === next.type ? next.text.match(/^\s+/) : null;
+        if (m) {
+          after.push({ type: 'text', text: m[0], styles: new Set() });
+          next.text = next.text.slice(m[0].length);
+        }
+        break;
+      }
+    }
+    const moved = [...before, ...after];
+    if (moved.length) {
+      a_tokens.splice(split, 0, ...moved.map((a_item) => ({ type: 'item', item: a_item })));
+      end += moved.length;
+    }
+    t = end;
+  }
+}
+
+/**
+ * 書式付きの項目の並びを Markdown にする（serializeInline）。
+ * @param {object[]} a_items 項目（groupInlineItems でまとめたもの）
+ * @returns {string}
+ */
+function writeInlineItems(a_items) {
+  // 書式ごとに、各項目からその書式が続く長さ（外側にする書式を決めるのに使う）
+  const remain = {};
+  for (const k of FORMAT_ORDER_LIST) {
+    remain[k] = new Array(a_items.length + 1).fill(0);
+    for (let n = a_items.length - 1; n >= 0; n--) remain[k][n] = a_items[n].styles.has(k) ? remain[k][n + 1] + 1 : 0;
+  }
+  // 1回目：記号を開く・閉じる位置を決める（斜体の記号は後で決める）
+  const tokens = [];
+  const stack = [];
+  const runs = [];
+  const closeTo = (a_depth) => {
+    while (stack.length > a_depth) {
+      const run = stack.pop();
+      tokens.push({ type: 'close', run });
+    }
+  };
+  for (let n = 0; n < a_items.length; n++) {
+    const item = a_items[n];
+    let keep = 0;
+    while (keep < stack.length && item.styles.has(stack[keep].kind)) keep++;
+    closeTo(keep);
+    const opening = [...item.styles].filter((k) => !stack.some((r) => r.kind === k));
+    opening.sort((a, b) => remain[b][n] - remain[a][n] || FORMAT_ORDER_LIST.indexOf(a) - FORMAT_ORDER_LIST.indexOf(b));
+    for (const kind of opening) {
+      const run = { kind, underscore: 'i' === kind && item.underscore, contested: false, open: -1, close: -1, marker: '*' };
+      runs.push(run);
+      stack.push(run);
+      tokens.push({ type: 'open', run });
+    }
+    tokens.push({ type: 'item', item });
+  }
+  closeTo(0);
+  moveWhiteSpaceOutOfMarkers(tokens);
+  for (let t = 0; t < tokens.length; t++) {
+    if ('open' === tokens[t].type) tokens[t].run.open = t;
+    if ('close' === tokens[t].type) tokens[t].run.close = t;
+  }
+  // 閉じた「*」の記号の直後に「*」の記号を開く所（「**a*b****c*」のような並び）の斜体は、「_」で書く候補にする
+  // （「*」が続くと、どこまでが閉じ側か読み違えるため。CommonMark でも「**a*b***_c_」なら正しく読める）
+  const isStar = (a_token) => 'i' === a_token.run.kind || 'b' === a_token.run.kind;
+  for (let t = 0; t < tokens.length;) {
+    if ('item' === tokens[t].type) { t++; continue; }
+    let end = t;
+    while (end < tokens.length && 'item' !== tokens[end].type) end++;
+    const cluster = tokens.slice(t, end);
+    if (cluster.some((x) => 'close' === x.type && isStar(x)) && cluster.some((x) => 'open' === x.type && isStar(x))) {
+      for (const x of cluster) if ('i' === x.run.kind) x.run.contested = true;
+    }
+    t = end;
+  }
+  // 斜体の記号を決める。「_」は、前後が単語の文字でない時だけ使える（単語の途中の「_」は斜体の記号にならない）。
+  // 前後の文字は、記号を挟まない隣の文字（a_adjacent。記号を挟む時は記号＝句読点）か、記号を除いた隣の文字
+  const charBefore = (a_t, a_adjacent) => {
+    for (let t = a_t - 1; t >= 0; t--) {
+      if ('item' === tokens[t].type) return tokens[t].item.text.slice(-1);
+      if (a_adjacent) return '*';
+    }
+    return '';
+  };
+  const charAfter = (a_t, a_adjacent) => {
+    for (let t = a_t + 1; t < tokens.length; t++) {
+      if ('item' === tokens[t].type) return tokens[t].item.text[0];
+      if (a_adjacent) return '*';
+    }
+    return '';
+  };
+  const canUnderscore = (a_run, a_adjacent) =>
+    !RE_WORD_CHAR.test(charBefore(a_run.open, a_adjacent)) && !RE_WORD_CHAR.test(charAfter(a_run.close, a_adjacent));
+  for (const run of runs) {
+    if ('i' !== run.kind) continue;
+    run.marker = (run.underscore && canUnderscore(run, false)) || (run.contested && canUnderscore(run, true)) ? '_' : '*';
+  }
+  // 2回目：書き出す
+  let out = '';
+  let text = '';
+  const flush = () => {
+    out += escapeText(text);
+    text = '';
+  };
+  for (const token of tokens) {
+    if ('item' === token.type) {
+      if ('text' === token.item.type) {
+        text += token.item.text;
+      } else {
+        flush();
+        out += token.item.text;
+      }
+      continue;
+    }
+    flush();
+    const run = token.run;
+    const markers = 'i' === run.kind ? [run.marker, run.marker] : FORMAT_MARKERS[run.kind];
+    out += 'open' === token.type ? markers[0] : markers[1];
+  }
+  flush();
   return out;
 }
 
