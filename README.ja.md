@@ -6,7 +6,7 @@
 
 English: see [README.md](README.md).
 
-![GitHubスタイルで文書を編集している mdevc の画面。表・貼り付けた画像・mdevc アウトライン・右クリックのメニュー](images/readme/editor-screen-gh-style.png)
+![GitHubスタイルで文書を編集している mdevc の画面。表・貼り付けた画像・mdevc アウトライン・右クリックのメニュー](images/readme/editor-screen-gh-style_JPN.png)
 
 ## mdevc の特長
 
@@ -28,7 +28,7 @@ English: see [README.md](README.md).
 VS Code 標準の Markdown プレビューの見た目が好みなら、設定の「表示スタイル」を「VSCodeスタイル」にします。
 どちらのスタイルでも編集機能は同じです。
 
-![VSCodeスタイルの mdevc の画面](images/readme/editor-screen-vs-style.png)
+![VSCodeスタイルの mdevc の画面](images/readme/editor-screen-vs-style_JPN.png)
 
 ## はじめかた
 
@@ -46,7 +46,7 @@ VS Code 標準の Markdown プレビューの見た目が好みなら、設定�
 
 ## よく使う操作は右クリックから
 
-<img src="images/readme/context-menu.png" alt="mdevc の右クリックのメニュー" width="300" align="right">
+<img src="images/readme/context-menu_JPN.png" alt="mdevc の右クリックのメニュー" width="300" align="right">
 
 編集画面を右クリックすると、よく使う操作をすぐに実行できます（画像は英語表示の例です）。
 

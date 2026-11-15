@@ -6,7 +6,7 @@ forth — and the file you save is still plain Markdown.
 
 日本語の説明は [README.ja.md](README.ja.md) を参照してください。
 
-![mdevc editing a Markdown document in GitHub style, with a table, a pasted image, the mdevc Outline, and the context menu](images/readme/editor-screen-gh-style.png)
+![mdevc editing a Markdown document in GitHub style, with a table, a pasted image, the mdevc Outline, and the context menu](images/readme/editor-screen-gh-style_ENG.png)
 
 ## Why mdevc
 
@@ -29,7 +29,7 @@ forth — and the file you save is still plain Markdown.
 Prefer the look of the built-in VS Code Markdown preview? Switch **Doc Style** in Settings. The editing features are the
 same in both styles.
 
-![mdevc in VS Code style](images/readme/editor-screen-vs-style.png)
+![mdevc in VS Code style](images/readme/editor-screen-vs-style_ENG.png)
 
 ## Get started
 
@@ -47,7 +47,7 @@ To edit a file as plain text, click **Reopen with Text Editor** at the top right
 
 ## Everything at your right click
 
-<img src="images/readme/context-menu.png" alt="mdevc context menu" width="300" align="right">
+<img src="images/readme/context-menu_ENG.png" alt="mdevc context menu" width="300" align="right">
 
 Right-click in the document for the commands you use most:
 
