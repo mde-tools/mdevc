@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.0.3
+
+* Replace the README screenshots with language-specific ones
+
 ## 1.0.2
 
 - Tables: Up / Down in a cell with several lines moves between its lines, and from the top / bottom line to the cell above / below. Entering a table with Up / Down from the paragraph before or after it goes to the cell in the same column.
