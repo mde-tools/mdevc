@@ -13,12 +13,38 @@
 //  - 貼り付け：文字は Markdown として読み、書式にして貼る（Ctrl+Shift+V は書式なし）。Excel 等の表は表にして貼る。
 //  - コピー：他のアプリ向けの HTML と、mdew どうしで書式を保つ Markdown も一緒にコピーする（clipboard.js）。
 //  - 画像：ダブルクリック・右クリックの「画像を開く」で、既定のアプリで開く（ホストが開く）。
-import { parseBlocks, renderBlock, renderInline, serializeBlock, imageSource, RE_BARE_EMAIL, RE_EMAIL_PREV_CHAR } from './markdown.js';
+import { parseBlocks, renderBlock, renderInline, serializeBlock, imageSource, imageMarkupWithWidth, RE_BARE_EMAIL, RE_EMAIL_PREV_CHAR } from './markdown.js';
 import { t } from './i18n.js';
 import {
   MARKDOWN_MIME, setClipboardData, writeClipboard, lastCopiedMarkdown, buildCopyData, buildExcelCopy, buildTableCopy,
   tableFromHtml, tableFromTsv, rowsToMarkdownTable, imageSourcesInRows, cellMarkdown, htmlToMarkdown,
 } from './clipboard.js';
+
+/** 右クリックの「画像のサイズ」の倍率（%。Typora と同じく、元の画像の大きさに対する割合）。 */
+const IMAGE_SIZE_PERCENTS = [25, 33, 50, 67, 80, 100, 150, 200];
+
+/**
+ * 画像の大きさの指定（width・height 属性と、style の width・zoom）から求めた、表示の幅（px。画面の幅に収めるための縮小は
+ * 含めない）。指定が無ければ、元の画像の幅。
+ * @param {HTMLImageElement} a_img 画像（読み込み済み）
+ * @returns {number}
+ */
+function imageDisplayWidth(a_img) {
+  const natural = a_img.naturalWidth;
+  const px = (a_value) => (a_value && /^\d+(?:\.\d+)?(?:px)?$/.test(a_value.trim()) ? parseFloat(a_value) : 0);
+  // style の指定は、width・height 属性より優先される（ブラウザーの表示と同じ）
+  let width = px(a_img.style.width) || px(a_img.getAttribute('width'));
+  if (!width) {
+    const height = px(a_img.style.height) || px(a_img.getAttribute('height'));
+    width = height && a_img.naturalHeight ? natural * height / a_img.naturalHeight : natural;
+  }
+  const zoom = (a_img.style.zoom || '').trim();
+  if (zoom) {
+    const z = zoom.endsWith('%') ? parseFloat(zoom) / 100 : parseFloat(zoom);
+    if (z > 0) width *= z;
+  }
+  return width;
+}
 
 /** 文字を書く単位の要素（カーソルのある「行」を探す時に使う）。 */
 const TEXT_BLOCK_SELECTOR = 'p,h1,h2,h3,h4,h5,h6,li,pre,td,th,div.md-raw';
@@ -1626,7 +1652,10 @@ export class Editor {
     const items = [{ label: t('ページトップに戻る'), run: () => this.m_handlers.onPageTop() }, null];
     if ('IMG' === e.target.tagName) {
       const src = imageSource(e.target);
-      items.push({ label: t('画像を開く'), run: () => this.m_handlers.onOpenImage(src) }, null);
+      items.push({ label: t('画像を開く'), run: () => this.m_handlers.onOpenImage(src) });
+      // 画像のサイズ（Typora と同じ倍率。元の画像の大きさに対する割合。100% は大きさの指定を外す）
+      if (!this.m_readOnly) items.push(this.imageSizeMenuItem(e.target));
+      items.push(null);
     }
     const linkItem = this.linkMenuItem(e.target);
     if (this.m_readOnly) {
@@ -1705,6 +1734,50 @@ export class Editor {
     items.push(null, { label: t('ソースモードに切り替え'), run: () => this.m_handlers.onToggleSource() });
     if (this.m_handlers.onOpenHelp) items.push(null, { label: t('ヘルプを開く'), run: () => this.m_handlers.onOpenHelp() });
     showMenu(e.clientX, e.clientY, items, (a_item) => a_item.run());
+  }
+
+  /**
+   * 右クリックした画像の「画像のサイズ」のサブメニュー（Typora と同じ倍率。元の画像の大きさに対する割合）。
+   * 今の大きさに当たる倍率に ✓ を付ける。画像を読み込めていない（元の大きさが分からない）時は使えない。
+   * @param {HTMLImageElement} a_img 右クリックした画像
+   * @returns {object} メニューの項目
+   */
+  imageSizeMenuItem(a_img) {
+    const natural = a_img.naturalWidth;
+    const current = natural ? imageDisplayWidth(a_img) : 0;
+    return {
+      label: t('画像のサイズ'),
+      disabled: !natural,
+      submenu: IMAGE_SIZE_PERCENTS.map((p) => ({
+        label: 100 === p ? t('{0}%（元のサイズ）', p) : `${p}%`,
+        checked: Math.abs(current - natural * p / 100) <= 1,
+        run: () => this.resizeImage(a_img, p),
+      })),
+    };
+  }
+
+  /**
+   * 画像の大きさを、元の画像の大きさに対する割合で変える（右クリックの「画像のサイズ」）。保存すると、大きさは width 属性で
+   * 書かれる（imageMarkupWithWidth）。100% は大きさの指定を外し、他に指定が無ければ「![文字](参照先)」の形に戻す。
+   * @param {HTMLImageElement} a_img 画像
+   * @param {number} a_percent 割合（%）
+   */
+  resizeImage(a_img, a_percent) {
+    if (!this.m_root.contains(a_img) || !a_img.naturalWidth) return;
+    const width = 100 === a_percent ? 0 : Math.max(1, Math.round(a_img.naturalWidth * a_percent / 100));
+    const tag = imageMarkupWithWidth(a_img, width);
+    this.checkpoint('edit');
+    if (null === tag) {
+      // 「![文字](参照先)」の形に戻す：大きさの指定を外すだけ（参照先・文字・タイトルはそのまま）
+      for (const name of ['width', 'height', 'style', 'data-html']) a_img.removeAttribute(name);
+    } else {
+      // 開いた時と同じ形の img 要素を作って置き換える（表示に使う属性は renderInline と同じ）
+      const tpl = document.createElement('template');
+      tpl.innerHTML = renderInline(tag);
+      const img = tpl.content.querySelector('img');
+      if (img) a_img.replaceWith(img);
+    }
+    this.changed();
   }
 
   /**

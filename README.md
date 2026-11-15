@@ -47,7 +47,7 @@ To edit a file as plain text, click **Reopen with Text Editor** at the top right
 
 ## Everything at your right click
 
-<img src="images/readme/context-menu_ENG.png" alt="mdevc context menu" width="300" align="right">
+<img src="images/readme/context-menu_ENG.png" alt="mdevc context menu" align="right">
 
 Right-click in the document for the commands you use most:
 
@@ -56,6 +56,7 @@ Right-click in the document for the commands you use most:
 - Bold, Italic, Underline, Strikethrough, Inline Code, Highlight
 - **Make Link…** and **Insert Table…**
 - On a link: **Open Link**, **Copy URL**, **Edit Link…**, and **Remove Link**
+- On an image: **Open Image** and **Image Size**
 - **Switch to Source Mode** and **Open Help**
 
 Commands that already apply to the selection are checked (✓). Right-click a table cell for table commands, and a
@@ -110,6 +111,8 @@ Shift+Enter breaks the line inside a cell, Ctrl+Enter inserts a row below.
 
 Paste an image from the clipboard with `Ctrl+V`. It is saved right away in a `<file name>.images` folder next to the
 file (for example `clipboard_image_1.png`), and a relative link is inserted. The file must have been saved at least once.
+Right-click an image → **Image Size** to resize it (25% to 200% of the original). The size is saved as a `width`
+attribute, so it looks the same on GitHub and in Typora.
 
 Links open with a single click: web links in your browser, `#heading` links inside the document, and relative links to
 other Markdown files in a new VS Code tab.

@@ -846,8 +846,9 @@ function tagAttribute(a_tag, a_name) {
   return t.value;
 }
 
-/** HTML の画像のタグの style のうち、表示に使うもの（大きさ・余白・配置。他は無視する）。 */
-const ALLOWED_IMAGE_STYLES = /^(?:width|height|max-width|max-height|min-width|min-height|margin(?:-[a-z]+)?|vertical-align|float|border(?:-[a-z]+)?|border-radius)$/;
+/** HTML の画像のタグの style のうち、表示に使うもの（大きさ・余白・配置。他は無視する）。zoom は、Typora で大きさを変えた画像の形
+ * （style="zoom:50%;"）。 */
+const ALLOWED_IMAGE_STYLES = /^(?:width|height|max-width|max-height|min-width|min-height|zoom|margin(?:-[a-z]+)?|vertical-align|float|border(?:-[a-z]+)?|border-radius)$/;
 
 /**
  * HTML の画像のタグ（<img src="..." alt="..." width="..." style="...">）を、画面の img 要素にする。
@@ -872,6 +873,56 @@ function renderImageTag(a_tag) {
   }).join(';');
   if (style) attrs += ` style="${escapeHtml(style)}"`;
   return `<img ${attrs} data-html="${escapeHtml(a_tag)}">`;
+}
+
+/**
+ * HTML のタグから、属性を取り除く（値の無い属性も）。
+ * @param {string} a_tag タグの文字列
+ * @param {string} a_name 属性の名前
+ * @returns {string} タグの文字列
+ */
+function removeTagAttribute(a_tag, a_name) {
+  return a_tag.replace(new RegExp(`\\s+${a_name}(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s"'>/]+))?(?=[\\s/>])`, 'gi'), '');
+}
+
+/**
+ * HTML のタグの最後（「>」・「/>」の前）に、属性を加える。
+ * @param {string} a_tag タグの文字列
+ * @param {string} a_name 属性の名前
+ * @param {string} a_value 属性の値
+ * @returns {string} タグの文字列
+ */
+function addTagAttribute(a_tag, a_name, a_value) {
+  const m = a_tag.match(/\s*(\/?)>$/);
+  return `${a_tag.slice(0, m.index)} ${a_name}="${escapeHtml(a_value)}"${m[1] ? ' />' : '>'}`;
+}
+
+/**
+ * 画像の大きさを変えた後の、画像の書き方（右クリックの「画像のサイズ」）。大きさは width 属性で書く（GitHub・VS Code の
+ * プレビュー・Typora のどれでも同じ大きさで表示される）。それまでの大きさの指定（width・height 属性と、style の width・
+ * height・zoom）は取り除き、他の属性・style はそのまま残す。「![文字](参照先)」の形で書かれていた画像は、HTML のタグにする。
+ * 大きさの指定を外した（a_width が 0）結果、タグに src・alt・title しか残らない時は、「![文字](参照先)」の形に戻す（null を返す）。
+ * @param {HTMLImageElement} a_img 画面の img 要素
+ * @param {number} a_width 幅（px）。0 の時は大きさの指定を外す（元の大きさ）
+ * @returns {string|null} HTML のタグ。「![文字](参照先)」の形にする時は null
+ */
+export function imageMarkupWithWidth(a_img, a_width) {
+  let tag = a_img.dataset.html;
+  if (!tag) {
+    const title = a_img.getAttribute('title');
+    tag = `<img src="${escapeHtml(imageSource(a_img))}" alt="${escapeHtml(a_img.getAttribute('alt') || '')}"`
+      + `${title ? ` title="${escapeHtml(title)}"` : ''} />`;
+  }
+  tag = removeTagAttribute(removeTagAttribute(tag, 'width'), 'height');
+  const style = tagAttribute(tag, 'style');
+  if (null !== style) {
+    tag = removeTagAttribute(tag, 'style');
+    const rest = style.split(';').map((d) => d.trim()).filter((d) => d && !/^(?:width|height|zoom)\s*:/i.test(d));
+    if (rest.length) tag = addTagAttribute(tag, 'style', `${rest.join('; ')};`);
+  }
+  if (a_width) return addTagAttribute(tag, 'width', String(a_width));
+  const others = ['src', 'alt', 'title'].reduce((a_rest, a_name) => removeTagAttribute(a_rest, a_name), tag);
+  return /^<img\s*\/?>$/i.test(others) ? null : tag;
 }
 
 /**

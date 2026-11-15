@@ -43,6 +43,8 @@ const EN = {
 
   // ---- 右クリックのメニュー ----
   '画像を開く': 'Open Image',
+  '画像のサイズ': 'Image Size',
+  '{0}%（元のサイズ）': '{0}% (Original Size)',
   'コピー': 'Copy',
   'Excel用にコピー': 'Copy for Excel',
   'すべて選択': 'Select All',

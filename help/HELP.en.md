@@ -212,6 +212,16 @@ cell; in a heading, a new paragraph is added after the heading).
 Double-click an image, or right-click → "Open Image", to open it in the default Windows app for images
 (such as Photos).
 
+To change the display size of an image, right-click → "Image Size" and choose a percentage of the original size
+(25% to 200%). The size is saved as `width`, as in `<img src="images/a.png" alt="description" width="320" />`, so the
+image has the same size on GitHub, in the VS Code preview, and in Typora. "100% (Original Size)" removes the size and
+returns the image to the `![description](images/a.png)` form. Images resized in Typora (`style="zoom:50%;"`) are also
+shown at that size.
+
+Images are shown with one pixel of the image as one pixel on the screen (1.5 pixels when the Windows scale is 150%),
+the same as GitHub and web browsers. Screenshots taken on a scaled screen therefore look larger than the original; use
+"Image Size" to make them smaller.
+
 ## Links
 
 Links are shown in blue with an underline and open with a **click** (no need to hold Ctrl). To edit the text of a link,
