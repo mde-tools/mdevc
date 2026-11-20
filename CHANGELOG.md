@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.0.5
+
+- Add an example of table check boxes and Excel copy and paste, with screenshots, to the README.
+
 ## 1.0.4
 
 - Right-click an image for Image Size to resize it (25% to 200% of the original size). The size is saved as a `width` attribute, so the image has the same size on GitHub and in Typora. "100% (Original Size)" returns the image to the `![text](path)` form.
