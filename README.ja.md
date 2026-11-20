@@ -4,7 +4,7 @@
 ページとして開きます。見出し・箇条書き・表・チェックボックス・画像は入力したそばから整形されます。ソースと
 プレビューの画面を行き来する必要はなく、保存されるのは Git の差分もきれいな普通の Markdown のままです。
 
-English: see [README.md](README.md).
+日本語 | [英語](README.md)
 
 ![GitHubスタイルで文書を編集している mdevc の画面。表・貼り付けた画像・mdevc アウトライン・右クリックのメニュー](images/readme/editor-screen-gh-style_JPN.png)
 

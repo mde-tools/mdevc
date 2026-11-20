@@ -4,7 +4,7 @@
 directly: headings, lists, tables, check boxes, and images take shape as you type. No source pane, no side-by-side
 preview, no switching back and forth — and the file you save is still plain Markdown that diffs cleanly in Git.
 
-日本語の説明は [README.ja.md](README.ja.md) を参照してください。
+English | [Japanese](README.ja.md)
 
 ![mdevc editing a Markdown document in GitHub style, with a table, a pasted image, the mdevc Outline, and the context menu](images/readme/editor-screen-gh-style_ENG.png)
 
