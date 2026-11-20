@@ -1,5 +1,5 @@
 {
-  "description": "Markdown ファイルを、プレビューのまま直接編集できるエディタ",
+  "description": "Markdown ファイルを、プレビューのまま直接編集できる WYSIWYG エディタ。表の編集・表のセルのチェックボックス・画像の貼り付け・Excel との連携に対応",
   "customEditor.displayName": "mdevc（Markdown エディタ）",
   "command.openWithTextEditor": "テキストエディタで開き直す",
   "command.openWithMdevc": "mdevc で開き直す",

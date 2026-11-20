@@ -1,5 +1,5 @@
 {
-  "description": "WYSIWYG Markdown editor: edit Markdown files directly in the preview.",
+  "description": "WYSIWYG Markdown editor: edit Markdown files directly in the preview, with easy tables, check boxes in table cells, pasted images, and Excel copy and paste.",
   "customEditor.displayName": "mdevc (Markdown editor)",
   "command.openWithTextEditor": "Reopen with Text Editor",
   "command.openWithMdevc": "Reopen with mdevc",

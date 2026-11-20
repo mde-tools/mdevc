@@ -892,7 +892,8 @@ export class Editor {
    */
   onInput(e) {
     // 削除で段落・見出しがつながった時等に、ブラウザが元の見た目を保とうとして付けた style（文字の大きさ等）を取り除く
-    if (e.inputType.startsWith('delete')) this.removeInlineStyles();
+    // （チェックボックスをクリックした時の input は、inputType の無い普通の Event のため、空の文字として扱う）
+    if ((e.inputType || '').startsWith('delete')) this.removeInlineStyles();
     if ('insertParagraph' === e.inputType) this.afterNewParagraph();
     if ('insertLineBreak' === e.inputType) this.markSoftBreak();
     if (!e.isComposing && !this.m_composing && 'insertText' === e.inputType) this.applyInputRules();

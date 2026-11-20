@@ -1,6 +1,6 @@
 {
   "name": "mdevc",
-  "displayName": "mdevc - Inline Markdown Editor for Visual Studio Code",
+  "displayName": "mdevc - WYSIWYG Markdown Editor for VS Code",
   "description": "%description%",
   "version": "1.0.4",
   "publisher": "mde-tools",
@@ -19,7 +19,19 @@
   "keywords": [
     "markdown",
     "editor",
-    "wysiwyg"
+    "wysiwyg",
+    "markdown editor",
+    "preview",
+    "live preview",
+    "table",
+    "table editor",
+    "checklist",
+    "checkbox",
+    "task list",
+    "excel",
+    "paste image",
+    "image",
+    "japanese"
   ],
   "main": "./extension.js",
   "scripts": {
