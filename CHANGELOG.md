@@ -1,5 +1,11 @@
 # Change Log
 
+## 1.0.7
+
+* Links to files open in a new VS Code tab instead of replacing the current tab.
+* Fix a browser also opening with "This site can't be reached" when a link is clicked.
+* Fix "This link cannot be opened" for links to non-.md files (such as LICENSE.txt); they now open in the usual Visual Studio Code editor.
+
 ## 1.0.6
 
 - Show runs of 3+ blank lines in the source file as empty lines.
@@ -15,7 +21,7 @@
 
 ## 1.0.3
 
-* Replace the README screenshots with language-specific ones
+* Replace the README screenshots with language-specific ones.
 
 ## 1.0.2
 
@@ -32,8 +38,8 @@
 
 ## 1.0.1
 
-* Improve the README
+* Improve the README.
 
 ## 1.0.0
 
-- Initial release
+- Initial release.
