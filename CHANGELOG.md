@@ -1,5 +1,9 @@
 # Change Log
 
+## 1.0.6
+
+- Show runs of 3+ blank lines in the source file as empty lines.
+
 ## 1.0.5
 
 - Add an example of table check boxes and Excel copy and paste, with screenshots, to the README.
