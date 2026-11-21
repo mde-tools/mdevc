@@ -167,6 +167,13 @@ the line breaks in the source are shown as they are. Either way, the saved conte
 
 Press **Shift+Enter** in the middle of a paragraph to break the line there (it is saved as a line break in the source).
 
+### Empty lines (several blank lines in a row)
+
+Where three or more blank lines separate blocks, the editor shows empty lines there (three or four
+blank lines show one empty line, five or six show two). You can type in an empty line or remove it with BackSpace.
+Empty lines made by pressing Enter twice after a paragraph are also saved (one empty line is saved as two blank lines).
+Other apps such as GitHub show any number of blank lines as a single paragraph break.
+
 ## Tables
 
 Type something like `|Header 1|Header 2|` and press Enter to make a table (a header row and one empty row are created).
@@ -214,8 +221,8 @@ Double-click an image, or right-click → "Open Image", to open it in the defaul
 
 To change the display size of an image, right-click → "Image Size" and choose a percentage of the original size
 (25% to 200%). The size is saved as `width`, as in `<img src="images/a.png" alt="description" width="320" />`, so the
-image has the same size on GitHub, in the VS Code preview, and in Typora. "100% (Original Size)" removes the size and
-returns the image to the `![description](images/a.png)` form. Images resized in Typora (`style="zoom:50%;"`) are also
+image has the same size on GitHub, in the VS Code preview, and in other apps. "100% (Original Size)" removes the size and
+returns the image to the `![description](images/a.png)` form. Images sized with `style="zoom:50%;"` are also
 shown at that size.
 
 Images are shown with one pixel of the image as one pixel on the screen (1.5 pixels when the Windows scale is 150%),

@@ -13,14 +13,14 @@
 //  - 貼り付け：文字は Markdown として読み、書式にして貼る（Ctrl+Shift+V は書式なし）。Excel 等の表は表にして貼る。
 //  - コピー：他のアプリ向けの HTML と、mdew どうしで書式を保つ Markdown も一緒にコピーする（clipboard.js）。
 //  - 画像：ダブルクリック・右クリックの「画像を開く」で、既定のアプリで開く（ホストが開く）。
-import { parseBlocks, renderBlock, renderInline, serializeBlock, imageSource, imageMarkupWithWidth, RE_BARE_EMAIL, RE_EMAIL_PREV_CHAR } from './markdown.js';
+import { parseBlocks, renderBlock, renderInline, serializeBlock, imageSource, imageMarkupWithWidth, gapLineCount, blankLinesIn, RE_BARE_EMAIL, RE_EMAIL_PREV_CHAR } from './markdown.js';
 import { t } from './i18n.js';
 import {
   MARKDOWN_MIME, setClipboardData, writeClipboard, lastCopiedMarkdown, buildCopyData, buildExcelCopy, buildTableCopy,
   tableFromHtml, tableFromTsv, rowsToMarkdownTable, imageSourcesInRows, cellMarkdown, htmlToMarkdown,
 } from './clipboard.js';
 
-/** 右クリックの「画像のサイズ」の倍率（%。Typora と同じく、元の画像の大きさに対する割合）。 */
+/** 右クリックの「画像のサイズ」の倍率（%。元の画像の大きさに対する割合）。 */
 const IMAGE_SIZE_PERCENTS = [25, 33, 50, 67, 80, 100, 150, 200];
 
 /**
@@ -217,6 +217,15 @@ export class Editor {
     const fragment = document.createDocumentFragment();
     const template = document.createElement('template');
     blocks.forEach((b, i) => {
+      // ブロックの間の空行が3つ以上ある時は、空の段落を置く（gapLineCount。保存する時は、空の段落1つを
+      // 空行2つとして書き出す。serialize）
+      if (i > 0) {
+        for (let n = gapLineCount(blankLinesIn(a_markdown.slice(blocks[i - 1].end, b.start))); n > 0; n--) {
+          const p = document.createElement('p');
+          p.appendChild(document.createElement('br'));
+          fragment.append(p);
+        }
+      }
       template.innerHTML = renderBlock(b);
       const nodes = [...template.content.children];
       if (nodes[0]) this.m_info.set(nodes[0], { index: i, start: b.start, end: b.end });
@@ -248,19 +257,27 @@ export class Editor {
     let prev = null;
     let lastInfo = null;
     const positions = [];
+    // 前のブロックの後ろに続いている空の段落の数。ブロックの間の空の段落は、1つを空行2つとして書き出す（読み込む時は、
+    // 空行の数から空の段落を置く。load・gapLineCount）。文書の先頭・最後の空の段落は書き出さない
+    let emptyCount = 0;
     for (const el of this.m_root.children) {
       const info = this.m_info.get(el);
       const changed = !info || this.m_dirty.has(el);
       const text = changed ? serializeBlock(el, opts) : source.slice(info.start, info.end);
-      if ('' === text) continue; // 空の段落（Enter で作っただけの行など）は書き出さない
+      if ('' === text) {
+        if (positions.length > 0 && 'P' === el.tagName) emptyCount++;
+        continue;
+      }
       if (0 === positions.length) {
         // 先頭のブロックが読み込み時の先頭のままなら、その前にあった元テキスト（空行等）も残す
         if (info && 0 === info.index) out += source.slice(0, info.start);
-      } else if (info && prev && info.index === prev.index + 1) {
-        out += source.slice(prev.end, info.start); // 元の区切り（空行の数など）
+      } else if (info && prev && info.index === prev.index + 1 &&
+        emptyCount === gapLineCount(blankLinesIn(source.slice(prev.end, info.start)))) {
+        out += source.slice(prev.end, info.start); // 元の区切り（空行の数など。間の空の段落の数が読み込んだ時のまま）
       } else {
-        out += '\n\n';
+        out += '\n\n' + '\n\n'.repeat(emptyCount);
       }
+      emptyCount = 0;
       const start = out.length;
       out += text;
       positions.push({ el, start, end: out.length });
@@ -1206,7 +1223,7 @@ export class Editor {
       return true;
     }
     if ('TD' === tag || 'TH' === tag) {
-      // 表のセルで Enter：下のセルへ移る（mde・Typora 等と同じ。セルの中の改行は Shift+Enter）。最後の行では表の外へ出る
+      // 表のセルで Enter：下のセルへ移る（mde と同じ。セルの中の改行は Shift+Enter）。最後の行では表の外へ出る
       e.preventDefault();
       return this.moveVertical(a_block, 1);
     }
@@ -1654,7 +1671,7 @@ export class Editor {
     if ('IMG' === e.target.tagName) {
       const src = imageSource(e.target);
       items.push({ label: t('画像を開く'), run: () => this.m_handlers.onOpenImage(src) });
-      // 画像のサイズ（Typora と同じ倍率。元の画像の大きさに対する割合。100% は大きさの指定を外す）
+      // 画像のサイズ（元の画像の大きさに対する割合。100% は大きさの指定を外す）
       if (!this.m_readOnly) items.push(this.imageSizeMenuItem(e.target));
       items.push(null);
     }
@@ -1738,7 +1755,7 @@ export class Editor {
   }
 
   /**
-   * 右クリックした画像の「画像のサイズ」のサブメニュー（Typora と同じ倍率。元の画像の大きさに対する割合）。
+   * 右クリックした画像の「画像のサイズ」のサブメニュー（元の画像の大きさに対する割合）。
    * 今の大きさに当たる倍率に ✓ を付ける。画像を読み込めていない（元の大きさが分からない）時は使えない。
    * @param {HTMLImageElement} a_img 右クリックした画像
    * @returns {object} メニューの項目
@@ -2469,7 +2486,19 @@ export class Editor {
       a_block.append(htmlToFragment(renderInline(isHeading ? blocks[0].text.replace(/\n/g, ' ') : blocks[0].text)));
       rest = blocks.slice(1);
     }
-    const nodes = rest.flatMap((b) => htmlToNodes(renderBlock(b)));
+    // ブロックの間の空行が3つ以上ある時は、ファイルを開いた時と同じく空の段落を置く（load・gapLineCount）
+    const nodes = rest.flatMap((b) => {
+      const index = blocks.indexOf(b);
+      const gaps = [];
+      if (index > 0) {
+        for (let n = gapLineCount(blankLinesIn(a_text.slice(blocks[index - 1].end, b.start))); n > 0; n--) {
+          const p = document.createElement('p');
+          p.append(document.createElement('br'));
+          gaps.push(p);
+        }
+      }
+      return [...gaps, ...htmlToNodes(renderBlock(b))];
+    });
     a_block.after(...nodes);
     // 今の段落が空のまま残った場合（空の行に見出し等を貼った場合）は取り除く
     let last = nodes.length ? nodes[nodes.length - 1] : a_block;

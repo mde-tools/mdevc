@@ -226,7 +226,20 @@ export function buildCopyData(a_sel, a_root, a_opts, a_imageUrl) {
   if (inline) {
     markdown = serializeInline(container).replace(/\n+$/, '');
   } else {
-    markdown = [...container.children].map((c) => serializeBlock(c, a_opts)).filter((t) => '' !== t).join('\n\n');
+    // 空の段落（空の行）は、保存する時と同じく、次のブロックの前の空行を増やして残す（空の行1つにつき空行2つ。
+    // mde の BlocksToMarkdown と同じ）。範囲の先頭・最後の空の段落は書き出さない
+    markdown = '';
+    let emptyCount = 0;
+    for (const c of container.children) {
+      const t = serializeBlock(c, a_opts);
+      if ('' === t) {
+        if ('' !== markdown && 'P' === c.tagName) emptyCount++;
+        continue;
+      }
+      if ('' !== markdown) markdown += '\n\n' + '\n\n'.repeat(emptyCount);
+      markdown += t;
+      emptyCount = 0;
+    }
   }
   // HTML：他のアプリで見やすいよう、表に罫線を付け、画像はファイルの場所にする
   for (const img of container.querySelectorAll('img')) {

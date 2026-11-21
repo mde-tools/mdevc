@@ -96,6 +96,27 @@ function startsBlock(a_line, a_next, a_inParagraph) {
 }
 
 /**
+ * ブロックの間の空行の分だけ置く、空の行（空の段落・項目の上の空き）の数。Markdown の決まりでは、
+ * 空行がいくつ続いても段落の区切り1つだが、ここでは、空行1つの区切りの後ろに続く空行2つごとに、空の段落を1つ
+ * 表示する（空行2つは区切りだけ、3つ・4つは空の段落1つ、5つ・6つは2つ）。保存する時は、空の段落1つを空行2つとして
+ * 書き出す（Editor.serialize・serializeList）。
+ * @param {number} a_blankLines ブロックの間の空行の数
+ * @returns {number} 空の行の数
+ */
+export function gapLineCount(a_blankLines) {
+  return Math.max(0, Math.floor((a_blankLines - 1) / 2));
+}
+
+/**
+ * ブロックの間の元テキスト（前のブロックの最後の行の末尾から、次のブロックの先頭まで）にある空行の数。
+ * @param {string} a_separator ブロックの間の元テキスト
+ * @returns {number} 空行の数
+ */
+export function blankLinesIn(a_separator) {
+  return Math.max(0, (a_separator.match(/\n/g) || []).length - 1);
+}
+
+/**
  * 行の配列をブロックの配列にする。引用・リストの中身は、記号や字下げを外した行で再帰的に呼ぶ。
  * @param {string[]} a_lines 行の配列（改行を含まない）
  * @returns {object[]} ブロックの配列。各ブロックには種類（type）ごとの内容と、元の行の範囲
@@ -228,6 +249,8 @@ function parseList(a_lines, a_start) {
   const markerKind = ordered ? first[2].slice(-1) : first[2];
   const list = { type: 'list', ordered, startNumber: ordered ? parseInt(first[2], 10) : 1, marker: first[2], items: [], loose: false };
   let i = a_start;
+  // 項目の上に置く空の行の数（項目の間の空行が3つ以上ある時。gapLineCount）
+  let gap = 0;
   while (i < a_lines.length) {
     const m = a_lines[i].match(RE_LIST_ITEM);
     if (!m) break;
@@ -273,7 +296,8 @@ function parseList(a_lines, a_start) {
         head.text = head.text.slice(t[0].length);
       }
     }
-    list.items.push({ children, task });
+    list.items.push({ children, task, gap });
+    gap = 0;
     // 項目の間の空行
     let k = i;
     while (k < a_lines.length && isBlank(a_lines[k])) k++;
@@ -281,6 +305,7 @@ function parseList(a_lines, a_start) {
     if (k > i && nextItem && nextItem[1].length <= 3 &&
         (/\d/.test(nextItem[2]) ? nextItem[2].slice(-1) : nextItem[2]) === markerKind) {
       list.loose = true;
+      gap = gapLineCount(k - i);
       i = k;
     }
   }
@@ -397,7 +422,9 @@ export function renderBlock(a_block) {
           : (first ? ('list' === first.type ? '<br>' : '') + renderBlock(first) : '');
         inner += rest.map(renderBlock).join('');
         const box = null === item.task ? '' : `<input type="checkbox" contenteditable="false"${item.task ? ' checked' : ''}>`;
-        return `<li${null === item.task ? '' : ' class="task"'}>${box}${inner || '<br>'}</li>`;
+        // 項目の間の空行が3つ以上ある時は、上を空けて表示する（gapLineCount。app.css の li[data-gap]）
+        const gapAttr = item.gap ? ` data-gap="${item.gap}"` : '';
+        return `<li${null === item.task ? '' : ' class="task"'}${gapAttr}>${box}${inner || '<br>'}</li>`;
       }).join('');
       return `<${tag}${startAttr} data-marker="${escapeHtml(a_block.marker)}">${items}</${tag}>`;
     }
@@ -846,8 +873,8 @@ function tagAttribute(a_tag, a_name) {
   return t.value;
 }
 
-/** HTML の画像のタグの style のうち、表示に使うもの（大きさ・余白・配置。他は無視する）。zoom は、Typora で大きさを変えた画像の形
- * （style="zoom:50%;"）。 */
+/** HTML の画像のタグの style のうち、表示に使うもの（大きさ・余白・配置。他は無視する）。zoom は、
+ * style="zoom:50%;" の形で大きさを変えた画像のため。 */
 const ALLOWED_IMAGE_STYLES = /^(?:width|height|max-width|max-height|min-width|min-height|zoom|margin(?:-[a-z]+)?|vertical-align|float|border(?:-[a-z]+)?|border-radius)$/;
 
 /**
@@ -899,7 +926,7 @@ function addTagAttribute(a_tag, a_name, a_value) {
 
 /**
  * 画像の大きさを変えた後の、画像の書き方（右クリックの「画像のサイズ」）。大きさは width 属性で書く（GitHub・VS Code の
- * プレビュー・Typora のどれでも同じ大きさで表示される）。それまでの大きさの指定（width・height 属性と、style の width・
+ * プレビュー等、ほかのアプリでも同じ大きさで表示される）。それまでの大きさの指定（width・height 属性と、style の width・
  * height・zoom）は取り除き、他の属性・style はそのまま残す。「![文字](参照先)」の形で書かれていた画像は、HTML のタグにする。
  * 大きさの指定を外した（a_width が 0）結果、タグに src・alt・title しか残らない時は、「![文字](参照先)」の形に戻す（null を返す）。
  * @param {HTMLImageElement} a_img 画面の img 要素
@@ -1398,6 +1425,9 @@ function serializeList(a_el, a_opts) {
     flush();
     const body = blocks.filter((b, k) => 0 === k || '' !== b).join('\n');
     const [firstLine, ...restLines] = body.split('\n');
+    // 上を空けて表示している項目（data-gap。parseList）は、空の行1つを空行2つとして、区切りの空行1つに足して書き出す
+    const gapLines = parseInt(li.dataset.gap || '0', 10);
+    if (gapLines > 0 && lines.length > 0) for (let g = 0; g < gapLines * 2 + 1; g++) lines.push('');
     lines.push(`${marker} ${task}${firstLine}`.trimEnd());
     for (const l of restLines) lines.push(l ? pad + l : '');
   }

@@ -150,7 +150,7 @@ Shift+Enter breaks the line inside a cell, Ctrl+Enter inserts a row below.
 Paste an image from the clipboard with `Ctrl+V`. It is saved right away in a `<file name>.images` folder next to the
 file (for example `clipboard_image_1.png`), and a relative link is inserted. The file must have been saved at least once.
 Right-click an image → **Image Size** to resize it (25% to 200% of the original). The size is saved as a `width`
-attribute, so it looks the same on GitHub and in Typora.
+attribute, so it looks the same on GitHub and in other Markdown apps.
 
 Links open with a single click: web links in your browser, `#heading` links inside the document, and relative links to
 other Markdown files in a new VS Code tab.

@@ -6,8 +6,8 @@
 
 ## 1.0.4
 
-- Right-click an image for Image Size to resize it (25% to 200% of the original size). The size is saved as a `width` attribute, so the image has the same size on GitHub and in Typora. "100% (Original Size)" returns the image to the `![text](path)` form.
-- Fixed: the size of images resized in Typora (`style="zoom:50%;"`) was ignored.
+- Right-click an image for Image Size to resize it (25% to 200% of the original size). The size is saved as a `width` attribute, so the image has the same size on GitHub and in other Markdown apps. "100% (Original Size)" returns the image to the `![text](path)` form.
+- Fixed: the size of images sized with `style="zoom:50%;"` was ignored.
 
 ## 1.0.3
 

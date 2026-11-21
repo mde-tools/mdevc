@@ -94,6 +94,16 @@ body.full-width #doc :is(th, td) { overflow-wrap: anywhere; min-width: 0; }
 :is(#doc, #print-doc) h5, :is(#doc, #print-doc) h6 { font-size: 1em; }
 :is(#doc, #print-doc) ul, :is(#doc, #print-doc) ol { margin: 0 0 0.8em; padding-left: 1.8em; }
 :is(#doc, #print-doc) li > ul, :is(#doc, #print-doc) li > ol { margin-bottom: 0; }
+/* 項目の間の空行が3つ以上ある項目（markdown.js の data-gap）は、空の段落と同じ高さの分だけ上を空ける */
+:is(#doc, #print-doc) li[data-gap] { margin-top: calc(var(--list-item-gap, 0px) + var(--gap-lines, 8) * (1lh + 0.7625em)); }
+:is(#doc, #print-doc) li[data-gap="1"] { --gap-lines: 1; }
+:is(#doc, #print-doc) li[data-gap="2"] { --gap-lines: 2; }
+:is(#doc, #print-doc) li[data-gap="3"] { --gap-lines: 3; }
+:is(#doc, #print-doc) li[data-gap="4"] { --gap-lines: 4; }
+:is(#doc, #print-doc) li[data-gap="5"] { --gap-lines: 5; }
+:is(#doc, #print-doc) li[data-gap="6"] { --gap-lines: 6; }
+:is(#doc, #print-doc) li[data-gap="7"] { --gap-lines: 7; }
+:is(#doc, #print-doc) li[data-gap="8"] { --gap-lines: 8; }
 /* 箇条書きの行の間隔・項目の間隔（--list-line-height・--list-item-gap）。入れ子の箇条書きの前にも、項目の間と同じ間隔を空ける */
 :is(#doc, #print-doc) li { line-height: var(--list-line-height); }
 :is(#doc, #print-doc) li + li,
@@ -159,6 +169,7 @@ body.style-vscode {
 }
 body.style-vscode :is(#doc, #print-doc) { color: var(--vsc-text); }
 body.style-vscode :is(#doc, #print-doc) p { margin: 0 0 0.9em; }
+body.style-vscode :is(#doc, #print-doc) li[data-gap] { margin-top: calc(var(--list-item-gap, 0px) + var(--gap-lines, 8) * (1lh + 0.9em)); }
 body.style-vscode :is(#doc, #print-doc) :is(h1, h2, h3, h4, h5, h6) { line-height: 1.25; margin: 24px 0 16px; font-weight: 600; }
 body.style-vscode :is(#doc, #print-doc) h1 { font-size: 2em; border-bottom: 1px solid var(--vsc-separator); padding-bottom: 0.3em; }
 body.style-vscode :is(#doc, #print-doc) h2 { font-size: 1.5em; border-bottom: 1px solid var(--vsc-separator); padding-bottom: 0.3em; }
