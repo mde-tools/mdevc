@@ -439,7 +439,7 @@ function renderOutline(a_entries) {
  * クリックされたリンクを開く。
  *  - 「#見出し」：文書内の見出しへ移動する
  *  - http(s)・mailto：既定のブラウザ・メールソフトで開く（ホストに依頼）
- *  - 相対パスの .md ファイル：このウィンドウで開く（ホストに依頼）
+ *  - 相対パスのファイル（.md・.txt 等）：VS Code の別のタブで開く（ホストに依頼。今のファイルの保存していない変更はそのまま）
  * @param {string} a_href リンクの href 属性の値
  */
 function openLink(a_href) {
@@ -452,8 +452,7 @@ function openLink(a_href) {
     return;
   }
   const path = a_href.split('#')[0];
-  if (!/^[a-z][a-z0-9+.-]*:/i.test(a_href) && /\.(md|markdown)$/i.test(path)) {
-    // mdevc：VS Code の別のタブで開くので、今のファイルの保存していない変更はそのまま
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(a_href) && '' !== path) {
     send({ cmd: 'openRelative', path: decodeURIComponentSafe(path) });
     return;
   }

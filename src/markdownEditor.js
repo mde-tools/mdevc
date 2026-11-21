@@ -435,8 +435,9 @@ class MarkdownEditor {
   }
 
   /**
-   * 相対パスで書かれたファイルへのリンクを、開いているファイルのフォルダ基準で解決して、VS Code で開く
-   * （.md ファイルは mdevc で開く）。
+   * 相対パスで書かれたファイルへのリンクを、開いているファイルのフォルダ基準で解決して、VS Code の別のタブで開く
+   * （.md ファイルは mdevc で、それ以外のファイル（LICENSE.txt 等）は VS Code の普段のエディター等で開く）。今のタブが
+   * プレビュー（仮のタブ）でも置き換えないよう、通常のタブとして開く。
    * @param {string} a_relativePath リンクに書かれた相対パス（# より後ろは除いたもの）
    */
   async openRelative(a_relativePath) {
@@ -445,7 +446,7 @@ class MarkdownEditor {
       vscode.window.showWarningMessage(t('リンク先のファイルが見つかりません。{0}', a_relativePath));
       return;
     }
-    await vscode.commands.executeCommand('vscode.open', uri);
+    await vscode.commands.executeCommand('vscode.open', uri, { preview: false });
   }
 
   /**

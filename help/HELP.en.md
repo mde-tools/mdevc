@@ -239,7 +239,8 @@ move the cursor with the arrow keys. When you hover over a link, its target is s
   it is saved as written, without `< >`). When you type one, it becomes a link when you type a space or punctuation
   after it, or press Enter.
 - `#heading` links: move to that heading in the document.
-- Links to a Markdown file with a relative path (such as `other.md`): open that file in another VS Code tab.
+- Links to a file with a relative path (such as `other.md` or `LICENSE.txt`): open that file in another VS Code tab
+  (Markdown files open in mdevc, and other files open in the usual VS Code editor).
 
 Right-click a link → "Link" for these commands (same as mde):
 

@@ -149,6 +149,8 @@ export class Editor {
     });
     document.addEventListener('mouseup', () => { this.m_dragSelecting = false; });
     a_root.addEventListener('click', (e) => this.onClick(e));
+    // マウスの中ボタンでのリンクのクリックも、ホストの Webview に届かないようにする（onClick の stopLinkNavigation 参照）
+    a_root.addEventListener('auxclick', (e) => this.stopLinkNavigation(e));
     a_root.addEventListener('contextmenu', (e) => this.onContextMenu(e));
     // リンクの上にマウスを乗せた時に、ステータスバーへリンク先を出す（文書の要素には手を加えない）
     a_root.addEventListener('mouseover', (e) => {
@@ -1625,6 +1627,22 @@ export class Editor {
   }
 
   /**
+   * 文書の中のリンクのクリックを、ブラウザ・ホストに処理させない。VS Code の Webview は、リンクのクリックを window で
+   * 受け取って、リンク先を（自分の画面のアドレスを基準にした URL で）ブラウザで開いてしまう（ファイルへのリンクでは、
+   * ブラウザに「このサイトにアクセスできません」と表示され、http のリンクは2回開かれる）。リンクは onClick で開くので、
+   * クリックをここで止めて window まで届かないようにする（ダブルクリック・Shift+クリック等、開かない時も止める）。
+   * @param {MouseEvent} e
+   * @returns {HTMLAnchorElement|null} クリックしたリンク（文書の中のリンクでなければ null）
+   */
+  stopLinkNavigation(e) {
+    const link = e.target.closest && e.target.closest('a[href]');
+    if (!link || !this.m_root.contains(link)) return null;
+    e.preventDefault();
+    e.stopPropagation();
+    return link;
+  }
+
+  /**
    * クリック。リンクを開く、チェックボックスの切り替えを記録する。
    * @param {MouseEvent} e
    */
@@ -1632,11 +1650,10 @@ export class Editor {
     // リンクをクリックしたら開く（Ctrl は不要。Ctrl+クリックでも開く）。ドラッグで文字を選択した時、
     // ダブルクリック（単語の選択）、Shift+クリック（選択範囲を広げる）では開かない。
     // リンクの文字を編集する時は、矢印キーでカーソルを移動する
-    const link = e.target.closest && e.target.closest('a[href]');
+    const link = this.stopLinkNavigation(e);
     const down = this.m_mouseDown;
     const notDragged = down && Math.abs(e.clientX - down.x) < 5 && Math.abs(e.clientY - down.y) < 5;
-    if (link && this.m_root.contains(link) && !e.shiftKey && 1 === e.detail && notDragged) {
-      e.preventDefault();
+    if (link && !e.shiftKey && 1 === e.detail && notDragged) {
       // 文中にそのまま書いたメールアドレスのリンク（data-bare）は、書き直されていても今の文字で開く
       this.m_handlers.onOpenLink(link.dataset.bare ? `mailto:${link.textContent.trim()}` : link.getAttribute('href'));
       return;
