@@ -1,5 +1,15 @@
 # Change Log
 
+## 1.0.8
+
+* Fix tables inside list items turning into plain text after editing the list, saving, and reopening the file (a blank line is now written before and after the table).
+* Keep the blank lines between list items when saving an edited list.
+* Add space above tables inside list items.
+* Below-right of a table inside a list item, Enter adds the next item and Shift+Enter adds a line in the item.
+* Enter in the last row of a table inside a list item moves to the next item (or below the list).
+* Insert Table and pasting a table inside a list item now put the table in that item.
+* Show a line that contains only an image on its own line, even with "Do not break until a blank line".
+
 ## 1.0.7
 
 * Links to files open in a new VS Code tab instead of replacing the current tab.

@@ -1,8 +1,8 @@
 {
   "name": "mdevc",
-  "displayName": "mdevc - WYSIWYG Markdown Editor for VS Code",
+  "displayName": "Markdown Editor - mdevc (WYSIWYG)",
   "description": "%description%",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "publisher": "mde-tools",
   "license": "MIT",
   "repository": {

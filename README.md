@@ -1,4 +1,4 @@
-# mdevc — WYSIWYG Markdown Editor for VS Code
+# Markdown Editor - mdevc (WYSIWYG)
 
 **Edit Markdown right in the preview, the way you read it.** mdevc turns `.md` files into a page you edit
 directly: headings, lists, tables, check boxes, and images take shape as you type. No source pane, no side-by-side
