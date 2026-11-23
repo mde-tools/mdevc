@@ -251,6 +251,8 @@ function parseList(a_lines, a_start) {
   let i = a_start;
   // 項目の上に置く空の行の数（項目の間の空行が3つ以上ある時。gapLineCount）
   let gap = 0;
+  // 項目の前にあった空行の数（編集して保存する時に、同じ数の空行を書くため。serializeList）
+  let blank = 0;
   while (i < a_lines.length) {
     const m = a_lines[i].match(RE_LIST_ITEM);
     if (!m) break;
@@ -287,6 +289,8 @@ function parseList(a_lines, a_start) {
       i++;
     }
     const children = parseLines(content);
+    // 項目の中のブロックの前にあった空行の数（項目の文字と入れ子のリストの間の空行を、保存する時に残すため。renderBlock）
+    for (let c = 1; c < children.length; c++) children[c].blankBefore = children[c].lineStart - children[c - 1].lineEnd;
     let task = null;
     const head = children[0];
     if (head && 'paragraph' === head.type) {
@@ -296,8 +300,9 @@ function parseList(a_lines, a_start) {
         head.text = head.text.slice(t[0].length);
       }
     }
-    list.items.push({ children, task, gap });
+    list.items.push({ children, task, gap, blank });
     gap = 0;
+    blank = 0;
     // 項目の間の空行
     let k = i;
     while (k < a_lines.length && isBlank(a_lines[k])) k++;
@@ -306,6 +311,7 @@ function parseList(a_lines, a_start) {
         (/\d/.test(nextItem[2]) ? nextItem[2].slice(-1) : nextItem[2]) === markerKind) {
       list.loose = true;
       gap = gapLineCount(k - i);
+      blank = k - i;
       i = k;
     }
   }
@@ -414,7 +420,9 @@ export function renderBlock(a_block) {
     case 'list': {
       const tag = a_block.ordered ? 'ol' : 'ul';
       const startAttr = a_block.ordered && 1 !== a_block.startNumber ? ` start="${a_block.startNumber}"` : '';
-      const items = a_block.items.map((item) => {
+      // 項目の文字との間に空行があった入れ子のリスト（保存する時に空行を残す。serializeList）
+      const blankBeforeAttr = a_block.blankBefore > 0 ? ` data-blank-before="${a_block.blankBefore}"` : '';
+      const items = a_block.items.map((item, itemIndex) => {
         const [first, ...rest] = item.children;
         // 入れ子のリストから始まる項目（「-」だけの行の下に入れ子の項目がある）は、項目自身の行（<br>）を置く。
         // 無いと、項目の記号と入れ子のリストの記号が同じ行に並ぶため
@@ -424,13 +432,29 @@ export function renderBlock(a_block) {
         const box = null === item.task ? '' : `<input type="checkbox" contenteditable="false"${item.task ? ' checked' : ''}>`;
         // 項目の間の空行が3つ以上ある時は、上を空けて表示する（gapLineCount。app.css の li[data-gap]）
         const gapAttr = item.gap ? ` data-gap="${item.gap}"` : '';
-        return `<li${null === item.task ? '' : ' class="task"'}${gapAttr}>${box}${inner || '<br>'}</li>`;
+        // 項目の間に空行を入れたリストでは、項目の前の空行の数を覚えておく（保存する時に同じ数の空行を書く。serializeList）
+        const blankAttr = a_block.loose && itemIndex > 0 ? ` data-blank="${item.blank}"` : '';
+        return `<li${null === item.task ? '' : ' class="task"'}${gapAttr}${blankAttr}>${box}${inner || '<br>'}</li>`;
       }).join('');
-      return `<${tag}${startAttr} data-marker="${escapeHtml(a_block.marker)}">${items}</${tag}>`;
+      const looseAttr = a_block.loose ? ' data-loose="1"' : '';
+      return `<${tag}${startAttr} data-marker="${escapeHtml(a_block.marker)}"${looseAttr}${blankBeforeAttr}>${items}</${tag}>`;
     }
     default:
       return '';
   }
+}
+
+/** 画像だけの行（前後の空白を除いて、画像の記法だけが並んだ行）。画像の記法は、<img ...>・![文字](参照先)・
+ * それらをリンクにしたもの（[<img ...>](URL)・[![文字](参照先)](URL)）。 */
+const RE_IMAGE_ONLY_LINE = /^(?:(?:<img\b[^>]*>|!\[[^\]]*\]\((?:[^()]|\([^()]*\))+\)|\[(?:<img\b[^>]*>|!\[[^\]]*\]\((?:[^()]|\([^()]*\))+\))\]\((?:[^()]|\([^()]*\))+\))\s*)+$/i;
+
+/**
+ * 画像だけの行か（renderInline の改行の表示に使う）。
+ * @param {string} a_line 行
+ * @returns {boolean}
+ */
+function isImageOnlyLine(a_line) {
+  return RE_IMAGE_ONLY_LINE.test(a_line.trim());
 }
 
 /**
@@ -458,7 +482,14 @@ export function renderInline(a_text, a_inLink = false) {
     // 改行（ソースの1行の終わり）。既定は mde と同じく見た目も改行する。「空行が入るまで改行しない」の時は、
     // 文字の改行のまま置く（ブラウザが空白として表示する。保存する時はそのまま改行になる）
     if ('\n' === ch) {
-      out += s_joinSoftBreaks ? '\n' : '<br data-soft="1">';
+      // 画像だけの行は、「空行が入るまで改行しない」の時も、前後の行とつなげずにその行だけで表示する（mde と同じ）
+      let join = s_joinSoftBreaks;
+      if (join) {
+        const lineStart = s.lastIndexOf('\n', i - 1) + 1;
+        const nextEnd = s.indexOf('\n', i + 1);
+        join = !isImageOnlyLine(s.slice(lineStart, i)) && !isImageOnlyLine(s.slice(i + 1, nextEnd < 0 ? s.length : nextEnd));
+      }
+      out += join ? '\n' : '<br data-soft="1">';
       i++;
       continue;
     }
@@ -1399,6 +1430,10 @@ function serializeList(a_el, a_opts) {
   const delim = ordered ? ((a_el.dataset.marker || '.').slice(-1) === ')' ? ')' : '.') : '';
   const bullet = !ordered ? (a_el.dataset.marker || a_opts.bullet || '-') : '';
   const lines = [];
+  // 項目の間に空行を入れたリスト（data-loose）。編集で増やした項目（data-blank の無い項目）の前にも、空行を1つ入れる
+  const loose = '1' === a_el.dataset.loose;
+  // 直前の項目が表で終わっていたか（次の項目の前に空行を入れる。表の直後の行は、表の続きの行と見なされることがあるため）
+  let previousEndedWithTable = false;
   for (const li of a_el.children) {
     if ('LI' !== li.tagName) continue;
     // 項目の記号（番号付きリストは番号を振り直す）と、2行目以降の字下げ
@@ -1411,27 +1446,79 @@ function serializeList(a_el, a_opts) {
     let inline = document.createElement('span');
     const flush = () => {
       const t = serializeInline(inline).replace(/\n+$/, '');
-      if ('' !== t || 0 === blocks.length) blocks.push(t);
+      if ('' !== t || 0 === blocks.length) blocks.push({ text: t, el: null });
       inline = document.createElement('span');
     };
     for (const child of [...li.childNodes]) {
       if (1 === child.nodeType && /^(UL|OL|P|PRE|BLOCKQUOTE|TABLE|DIV|HR|H[1-6])$/.test(child.tagName)) {
         flush();
-        blocks.push(serializeBlock(child, a_opts));
+        blocks.push({ text: serializeBlock(child, a_opts), el: child });
       } else {
         inline.appendChild(child.cloneNode(true));
       }
     }
     flush();
-    const body = blocks.filter((b, k) => 0 === k || '' !== b).join('\n');
+    // 項目の中のブロックをつなぐ。表の前後は空行を挟む（表の前に空行が無いと、表が前の行の続きの文字になり、表の後ろに
+    // 空行が無いと、後ろの行が表の続きの行と見なされることがあるため）。項目の文字との間に空行があった入れ子のリスト
+    // （data-blank-before）は、同じ数（2つまで）の空行を挟む
+    const kept = blocks.filter((b, k) => 0 === k || '' !== b.text);
+    let body = kept[0].text;
+    for (let k = 1; k < kept.length; k++) {
+      const prevTag = kept[k - 1].el ? kept[k - 1].el.tagName : '';
+      const tag = kept[k].el ? kept[k].el.tagName : '';
+      let blankLines = 0;
+      if ('TABLE' === prevTag || 'TABLE' === tag) blankLines = 1;
+      else if (('UL' === tag || 'OL' === tag) && kept[k].el.dataset.blankBefore) {
+        blankLines = Math.min(2, parseInt(kept[k].el.dataset.blankBefore, 10) || 0);
+      }
+      body += '\n'.repeat(blankLines + 1) + kept[k].text;
+    }
     const [firstLine, ...restLines] = body.split('\n');
     // 上を空けて表示している項目（data-gap。parseList）は、空の行1つを空行2つとして、区切りの空行1つに足して書き出す
     const gapLines = parseInt(li.dataset.gap || '0', 10);
-    if (gapLines > 0 && lines.length > 0) for (let g = 0; g < gapLines * 2 + 1; g++) lines.push('');
+    if (gapLines > 0 && lines.length > 0) {
+      for (let g = 0; g < gapLines * 2 + 1; g++) lines.push('');
+    } else if (lines.length > 0) {
+      // 読み込んだ時に項目の前にあった空行（2つまで。3つ以上は空の行として上で書き出す）を、そのまま書き出す
+      let blankLines = undefined !== li.dataset.blank ? Math.min(2, parseInt(li.dataset.blank, 10) || 0) : (loose ? 1 : 0);
+      if (previousEndedWithTable) blankLines = Math.max(blankLines, 1);
+      for (let b = 0; b < blankLines; b++) lines.push('');
+    }
+    previousEndedWithTable = endsWithTable(li);
     lines.push(`${marker} ${task}${firstLine}`.trimEnd());
     for (const l of restLines) lines.push(l ? pad + l : '');
   }
   return lines.join('\n');
+}
+
+/**
+ * 要素が表で終わっているか（最後の子要素が表か、最後の項目が表で終わっている入れ子のリスト）。
+ * @param {Element} a_el リストの項目等
+ * @returns {boolean}
+ */
+export function endsWithTable(a_el) {
+  let last = a_el.lastElementChild;
+  // 項目の最後の空の改行（<br>）は除く
+  while (last && 'BR' === last.tagName && !last.nextSibling?.textContent?.trim()) last = last.previousElementSibling;
+  if (!last) return false;
+  if ('TABLE' === last.tagName) return !hasTextAfter(last);
+  if ('UL' === last.tagName || 'OL' === last.tagName) {
+    const item = last.lastElementChild;
+    return !!item && endsWithTable(item);
+  }
+  return false;
+}
+
+/**
+ * 要素の後ろに（同じ親の中に）文字があるか。
+ * @param {Element} a_el 要素
+ * @returns {boolean}
+ */
+function hasTextAfter(a_el) {
+  for (let n = a_el.nextSibling; n; n = n.nextSibling) {
+    if (3 === n.nodeType ? '' !== n.textContent.replace(/\u200b/g, '').trim() : 'BR' !== n.tagName) return true;
+  }
+  return false;
 }
 
 /**

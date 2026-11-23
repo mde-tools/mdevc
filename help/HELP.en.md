@@ -164,6 +164,7 @@ How a single line break in the source (one without a blank line) is shown can be
 a line break without a blank line is treated as a space, and paragraphs wrap at the width of the screen
 (the same as the VS Code Markdown preview). If you switch to "Break lines as in the source",
 the line breaks in the source are shown as they are. Either way, the saved content does not change.
+A line that contains only an image is always shown on its own line, without being joined to the lines before and after it.
 
 Press **Shift+Enter** in the middle of a paragraph to break the line there (it is saved as a line break in the source).
 

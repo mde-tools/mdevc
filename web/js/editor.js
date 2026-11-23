@@ -787,6 +787,12 @@ export class Editor {
     const rows = [...table.rows];
     const row = rows[rows.indexOf(a_cell.parentElement) + a_dir];
     if (!row) {
+      // リストの項目の中の表：表の前（後ろ）の、項目の中の文字へ。後ろに何も無ければ、文書の中で次の、文字を書く要素
+      // （次の項目・リストの後ろの段落等）へ移る（無ければ文書の最後に空の段落を作る）
+      if ('LI' === table.parentElement.tagName) {
+        const moved = this.moveOutOfNestedTable(table, a_dir);
+        if (moved) return 'created' === moved;
+      }
       // 表の外へ：前のブロックの最後・後ろのブロックの先頭
       const neighbor = a_dir < 0 ? table.previousElementSibling : table.nextElementSibling;
       const blocks = neighbor ? (neighbor.matches(TEXT_BLOCK_SELECTOR) ? [neighbor] : [...neighbor.querySelectorAll(TEXT_BLOCK_SELECTOR)]) : [];
@@ -807,6 +813,48 @@ export class Editor {
     }
     this.placeCaretInCell(row.cells[Math.min(a_cell.cellIndex, row.cells.length - 1)], a_dir, this.caretX(a_dir));
     return false;
+  }
+
+  /**
+   * リストの項目の中の表の、一番上の行から上・一番下の行から下へ出る（moveVertical）。表の前（後ろ）に項目の中の文字が
+   * あればそこへ（前は文字の終わり、後ろは文字の始め）。後ろに何も無い時は、文書の中で表の次にある、文字を書く要素の
+   * 先頭へ（無ければ、文書の最後に空の段落を作る）。
+   * @param {HTMLTableElement} a_table 項目の中の表
+   * @param {number} a_dir -1：上、1：下
+   * @returns {string|null} 移った時は 'moved'、段落を作って移った時は 'created'。表の前（後ろ）にブロックの要素がある時は
+   *   null（moveVertical の続きで移る）
+   */
+  moveOutOfNestedTable(a_table, a_dir) {
+    const sibling = a_dir < 0 ? a_table.previousSibling : a_table.nextSibling;
+    const isText = (a_node) => !!a_node && (3 === a_node.nodeType || /^(BR|IMG|SPAN|A|B|STRONG|I|EM|U|S|DEL|CODE|MARK|INPUT)$/.test(a_node.nodeName));
+    if (isText(sibling) && (3 !== sibling.nodeType || '' !== sibling.data.trim() || a_dir < 0)) {
+      // 項目の中の文字（表の前は項目の文字の終わり、後ろは表の直後の文字の始め）
+      const range = document.createRange();
+      if (a_dir < 0) range.setStartBefore(a_table);
+      else range.setStartAfter(a_table);
+      range.collapse(true);
+      const sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return 'moved';
+    }
+    if (a_dir < 0 || a_table.nextElementSibling) return null;
+    // 文書の中で表の次にある、文字を書く要素（表のセルは除く）
+    const next = [...this.m_root.querySelectorAll(TEXT_BLOCK_SELECTOR)].find((el) =>
+      !/^(TD|TH)$/.test(el.tagName) && !el.contains(a_table) &&
+      (a_table.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING));
+    if (next) {
+      this.placeCaretAtStart(next);
+      next.scrollIntoView({ block: 'nearest' });
+      return 'moved';
+    }
+    this.checkpoint('edit');
+    const p = document.createElement('p');
+    p.appendChild(document.createElement('br'));
+    this.m_root.appendChild(p);
+    this.placeCaretAtStart(p);
+    p.scrollIntoView({ block: 'nearest' });
+    return 'created';
   }
 
   /**
@@ -1192,6 +1240,13 @@ export class Editor {
       e.preventDefault();
       return;
     }
+    // リストの項目の中の表の右下の外（表の直後。項目の中）で Enter：次の項目を作る。Shift+Enter：項目の中で改行する
+    // （ブラウザ標準では何も起きないため。mde と同じ）
+    if ('Enter' === key && !e.ctrlKey && !e.altKey && 'LI' === block.tagName && this.enterAfterNestedTable(block, e.shiftKey)) {
+      e.preventDefault();
+      this.changed();
+      return;
+    }
     // Enter の直前に書いたメールアドレスは、mailto のリンクにする（linkifyEmailBeforeCaret）
     if ('Enter' === key && !e.ctrlKey && !e.altKey && this.linkifyEmailBeforeCaret(false)) this.changed();
     if ('Enter' === key && !e.shiftKey) {
@@ -1204,6 +1259,43 @@ export class Editor {
     } else if ('Delete' === key) {
       if (this.onDelete(e, block)) this.changed();
     }
+  }
+
+  /**
+   * カーソルがリストの項目の中の表の直後（表の右下の外）にある時の Enter。Shift+Enter は、項目の中で改行する（表の後ろに
+   * 段落を作る）。Enter は、次の項目を作る（項目の間の空行の数・チェックボックスは、今の項目に合わせる）。
+   * @param {HTMLElement} a_li カーソルのある項目
+   * @param {boolean} a_shift Shift+Enter か
+   * @returns {boolean} 処理したか（カーソルが表の直後でなければ何もせず false）
+   */
+  enterAfterNestedTable(a_li, a_shift) {
+    const sel = getSelection();
+    if (!sel.rangeCount || !sel.isCollapsed || sel.anchorNode !== a_li) return false;
+    // カーソルの前（空白だけの文字は除く）が表で、後ろが空（空白・改行・入れ子のリストだけ）か
+    const isBlankNode = (a_node) => (3 === a_node.nodeType ? '' === a_node.data.replace(/\u200b/g, '').trim() : 'BR' === a_node.nodeName);
+    let prev = a_li.childNodes[sel.anchorOffset - 1];
+    while (prev && 3 === prev.nodeType && isBlankNode(prev)) prev = prev.previousSibling;
+    if (!prev || 'TABLE' !== prev.nodeName) return false;
+    for (let n = a_li.childNodes[sel.anchorOffset]; n; n = n.nextSibling) {
+      if (!isBlankNode(n) && !/^(UL|OL)$/.test(n.nodeName)) return false;
+    }
+    this.checkpoint('edit');
+    if (a_shift) {
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      prev.after(p);
+      this.placeCaretAtStart(p);
+      return true;
+    }
+    const li = document.createElement('li');
+    if (undefined !== a_li.dataset.blank) li.dataset.blank = a_li.dataset.blank;
+    if (a_li.classList.contains('task')) {
+      li.classList.add('task');
+      li.appendChild(createCheckbox(false));
+    }
+    a_li.after(li);
+    this.placeCaretAtStart(li);
+    return true;
   }
 
   /**
@@ -1741,7 +1833,9 @@ export class Editor {
           })),
         });
       }
-      items.push({ label: t('表を挿入…'), run: () => this.m_handlers.onInsertTable(this.topLevelBlock(block)) });
+      // 挿入する位置は、メニューを開いた時に決めておく（リストの項目の中では、項目の中に入れる。tableInsertAnchor）
+      const tableAnchor = this.tableInsertAnchor(block);
+      items.push({ label: t('表を挿入…'), run: () => this.m_handlers.onInsertTable(tableAnchor) });
     }
     if (cell && this.m_root.contains(cell)) {
       if (linkItem) items.push(null, linkItem);
@@ -1942,6 +2036,26 @@ export class Editor {
   }
 
   /**
+   * 「表を挿入…」で表を置く位置（insertTable の a_anchor）。リストの項目の中では、その項目と、項目の中でカーソルのある
+   * 部分（項目の直下の子のノード）の組。それ以外は、a_block を含む最上位のブロック（topLevelBlock）。
+   * @param {HTMLElement|null} a_block 右クリックした、文字を書く単位の要素
+   * @returns {HTMLElement|{li:HTMLElement, node:(Node|null)}|null}
+   */
+  tableInsertAnchor(a_block) {
+    const li = a_block && a_block.closest ? a_block.closest('li') : null;
+    if (!li || !this.m_root.contains(li) || /^(TD|TH)$/.test(a_block.tagName)) return this.topLevelBlock(a_block);
+    let node = null;
+    const sel = getSelection();
+    if (sel.rangeCount && li.contains(sel.anchorNode)) {
+      node = sel.anchorNode === li ? (li.childNodes[sel.anchorOffset - 1] || li.childNodes[sel.anchorOffset] || null) : sel.anchorNode;
+    } else if (a_block !== li) {
+      node = a_block;
+    }
+    while (node && node.parentNode !== li) node = node.parentNode;
+    return { li, node };
+  }
+
+  /**
    * 右クリックのメニューの「見出し」：段落・見出しの見出しのレベルを変える（0 は本文。mde と同じ）。
    * カーソルがその要素の中にあれば、同じ文字の位置に戻す。
    * @param {HTMLElement} a_block 段落・見出し（headingTarget）
@@ -1987,9 +2101,18 @@ export class Editor {
         for (let c = 0; c < a_cols; c++) tr.appendChild(this.newCell(table, -1, false));
       }
     }
-    const anchor = a_anchor && a_anchor.parentNode === this.m_root ? a_anchor : null;
     const isEmptyParagraph = (a_el) => 'P' === a_el.tagName && '' === a_el.textContent.replace(/\u200b/g, '').trim()
       && !a_el.querySelector('img');
+    if (a_anchor && a_anchor.li && a_anchor.li.isConnected && this.m_root.contains(a_anchor.li)) {
+      // リストの項目の中：カーソルのあった部分の後ろ（文字の部分なら、その行の続きの終わり）に、項目の中の表として置く
+      this.insertTableIntoListItem(a_anchor.li, a_anchor.node, table, isEmptyParagraph);
+      this.ensureTrailingParagraph();
+      this.focus();
+      this.placeCaretAtStart(head.cells[0]);
+      this.changed();
+      return;
+    }
+    const anchor = a_anchor && a_anchor.parentNode === this.m_root ? a_anchor : null;
     if (anchor && isEmptyParagraph(anchor)) anchor.replaceWith(table);
     else if (anchor) anchor.after(table);
     else this.m_root.appendChild(table);
@@ -2002,6 +2125,35 @@ export class Editor {
     this.focus();
     this.placeCaretAtStart(head.cells[0]);
     this.changed();
+  }
+
+  /**
+   * 表をリストの項目の中に置く（insertTable）。a_node が段落等のブロックならその後ろ（空の段落なら置き換える）、文字の部分
+   * なら、その文字の続き（次のブロックの前まで）の後ろに置く。表の直前の、文字の後ろの改行（Shift+Enter の <br>）は除く。
+   * @param {HTMLElement} a_li 項目
+   * @param {Node|null} a_node 項目の直下の子のノードのうち、カーソルのあった部分（無ければ項目の文字の部分）
+   * @param {HTMLTableElement} a_table 置く表
+   * @param {(a_el: HTMLElement) => boolean} a_isEmptyParagraph 空の段落か
+   */
+  insertTableIntoListItem(a_li, a_node, a_table, a_isEmptyParagraph) {
+    const isBlockEl = (a_n) => !!a_n && 1 === a_n.nodeType && /^(UL|OL|P|PRE|BLOCKQUOTE|TABLE|DIV|HR|H[1-6])$/.test(a_n.nodeName);
+    const node = a_node && a_node.parentNode === a_li ? a_node : null;
+    if (isBlockEl(node) && !/^(UL|OL)$/.test(node.nodeName)) {
+      if (a_isEmptyParagraph(node)) node.replaceWith(a_table);
+      else node.after(a_table);
+      return;
+    }
+    let ref = node && !isBlockEl(node) ? node : a_li.firstChild;
+    while (ref && !isBlockEl(ref)) ref = ref.nextSibling;
+    let before = ref ? ref.previousSibling : a_li.lastChild;
+    while (before && before.previousSibling &&
+           ('BR' === before.nodeName || (3 === before.nodeType && '' === before.data.replace(/\u200b/g, '').trim()))) {
+      const prev = before.previousSibling;
+      before.remove();
+      before = prev;
+    }
+    if (ref) ref.before(a_table);
+    else a_li.appendChild(a_table);
   }
 
   /** 文書全体を選択する。 */
@@ -2476,6 +2628,18 @@ export class Editor {
     if (!sel.rangeCount) return false;
     const range = sel.getRangeAt(0);
 
+    if ('LI' === tag && 1 === blocks.length && 'table' === blocks[0].type) {
+      // リストの項目の中に表を貼る：項目の中の表として、カーソルのある行の後ろに置く（mde と同じ。insertTableIntoListItem）
+      const table = htmlToNodes(renderBlock(blocks[0]))[0];
+      range.deleteContents();
+      let node = range.startContainer;
+      if (node === a_block) node = a_block.childNodes[range.startOffset - 1] || a_block.childNodes[range.startOffset] || null;
+      while (node && node.parentNode !== a_block) node = node.parentNode;
+      this.insertTableIntoListItem(a_block, node, table, (a_el) => 'P' === a_el.tagName && isEmptyBlock(a_el));
+      this.ensureTrailingParagraph();
+      placeCaretAtEnd(table);
+      return true;
+    }
     if ('LI' === tag) {
       // リストの項目の中にリストを貼る：項目として今の項目の後ろに加える（今の項目が空なら置き換える）
       if (1 !== blocks.length || 'list' !== blocks[0].type) return false;
